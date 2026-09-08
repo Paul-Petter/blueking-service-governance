@@ -192,7 +192,7 @@ class AuxiliaryEdge extends Polyline {
       ...super.getKeyStyle(attributes),
       stroke: '#ABB5CC',
       lineWidth: 2,
-      lineDash: [4, 4],
+      lineDash: [3, 3],
     };
   }
 

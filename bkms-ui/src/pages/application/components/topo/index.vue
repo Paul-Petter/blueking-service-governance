@@ -17,7 +17,10 @@
 -->
 
 <template>
-  <Skeleton :loading="!hasLoaded">
+  <Skeleton
+    :loading="!hasLoaded"
+    :once="false"
+  >
     <template #loading>
       <TopologySkeleton />
     </template>
@@ -220,8 +223,18 @@
     showDetail.value = true;
   }
 
-  watch([() => props.envName, () => appDetail.appID], () => {
-    handleGetResourceTopology();
+  /** 重置状态 */
+  function reset() {
+    selectedNodeIds.value = [];
+    focusedNodeId.value = '';
+    visibleNodeIds.value = [];
+    hasLoaded.value = false;
+    resourceData.value = undefined;
+  }
+
+  watch([() => props.envName, () => appDetail.appID], async () => {
+    reset();
+    await handleGetResourceTopology();
   });
 
   onMounted(async () => {
