@@ -495,3 +495,71 @@ func (s *StubClient) GetAlertDetail(ctx context.Context, req *AlertDetailReq) (m
 		"related_info":  map[string]any{"cluster": "stub-cluster"},
 	}, nil
 }
+
+// GetDashboardDirectoryTree 获取蓝鲸监控仪表盘数据
+func (s *StubClient) GetDashboardDirectoryTree(ctx context.Context, bkBizID int64) ([]*DashboardDirectoryNode, error) {
+	log.Infof(ctx, "Stub: GetDashboardDirectoryTree request: bkBizID=%d", bkBizID)
+	return []*DashboardDirectoryNode{
+		{
+			ID:    0,
+			UID:   "",
+			Title: "General",
+			Dashboards: []DashboardItem{
+				{
+					ID:            1001,
+					UID:           "test-dashboard-uid-1",
+					Title:         "test dashboard",
+					URI:           "db/test-dashboard",
+					URL:           "/grafana/d/test-dashboard-uid-1/test-dashboard",
+					Slug:          "test-dashboard",
+					Tags:          []string{"test"},
+					Editable:      true,
+					HasPermission: true,
+				},
+			},
+		},
+		{
+			ID:    2001,
+			UID:   "test-folder-uid-1",
+			Title: "test folder",
+			URI:   "db/test-folder",
+			URL:   "/grafana/dashboards/f/test-folder-uid-1/test-folder",
+			Dashboards: []DashboardItem{
+				{
+					ID:            2002,
+					UID:           "test-dashboard-uid-2",
+					Title:         "example-dashboard",
+					URI:           "db/example-dashboard",
+					URL:           "/grafana/d/test-dashboard-uid-2/example-dashboard",
+					Slug:          "example-dashboard",
+					Tags:          []string{"example"},
+					Editable:      true,
+					HasPermission: true,
+				},
+			},
+			HasFolderPermission: true,
+		},
+	}, nil
+}
+
+// GetDashboardDetail 模拟获取仪表盘详情，未知 uid 返回 (nil, nil)。
+func (s *StubClient) GetDashboardDetail(
+	ctx context.Context,
+	bkBizID int64,
+	dashboardUID string,
+) (*DashboardDetail, error) {
+	log.Infof(ctx, "Stub: GetDashboardDetail request: bkBizID=%d, uid=%s", bkBizID, dashboardUID)
+	switch dashboardUID {
+	case "test-dashboard-uid-1":
+		return &DashboardDetail{ID: 1001, UID: dashboardUID, Title: "test dashboard", Slug: "test-dashboard"}, nil
+	case "test-dashboard-uid-2":
+		return &DashboardDetail{
+			ID:    2002,
+			UID:   dashboardUID,
+			Title: "example-dashboard",
+			Slug:  "example-dashboard",
+		}, nil
+	default:
+		return nil, nil
+	}
+}

@@ -486,3 +486,80 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 
 	ginutils.OK(c, &serializer.InstanceTimeSeriesResp{Data: respData})
 }
+
+// ListDashboardDirectoryTree 获取蓝鲸监控仪表盘数据
+//
+//	@ID			ListDashboardDirectoryTree
+//	@Summary	获取蓝鲸监控仪表盘数据
+//	@Tags		bkintegrations-bkmonitor
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		workspaceID	path		string	true	"工作空间 ID"
+//	@Success	200			{object}	serializer.ListDashboardsResp
+//	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Router		/workspaces/{workspaceID}/bkmonitor/dashboards [get]
+func (h *Handler) ListDashboardDirectoryTree(c *gin.Context) {
+	var uriInput serializer.WorkspaceURIInput
+	if err := ginutils.BindURI(c, &uriInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	ws, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
+	if err != nil {
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.Wrapf(
+				err,
+				bkerrs.ErrCodeInvalidRequest,
+				"bk monitor project is not ready for workspace %s",
+				ws.ID,
+			),
+		)
+		return
+	}
+
+	client, err := bkmapi.NewMonitorClient(auth.MustGetUser(ctx).ID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "new bkmonitor client"))
+		return
+	}
+
+	tree, err := client.GetDashboardDirectoryTree(ctx, bkMonitorProjectID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list dashboard directory tree"))
+		return
+	}
+
+	ginutils.OK(c, &serializer.ListDashboardsResp{
+		Data: lo.Map(tree, func(node *bkmapi.DashboardDirectoryNode, _ int) *serializer.DashboardDirectoryOutput {
+			return &serializer.DashboardDirectoryOutput{
+				ID:    node.ID,
+				UID:   node.UID,
+				Title: node.Title,
+				URI:   node.URI,
+				URL:   node.URL,
+				Dashboards: lo.Map(
+					node.Dashboards,
+					func(item bkmapi.DashboardItem, _ int) *serializer.DashboardOutput {
+						return &serializer.DashboardOutput{
+							ID:    item.ID,
+							UID:   item.UID,
+							Title: item.Title,
+							URI:   item.URI,
+							URL:   item.URL,
+						}
+					},
+				),
+			}
+		}),
+	})
+}
