@@ -40,48 +40,9 @@ import AppDetailObservation from '~/pages/application/detail/observation.vue';
 // ── 重依赖 mock：掐断 API / store / router / i18n 链，页面 mount 只为得到真实模板 DOM ──
 // （jsdom 环境垫片 ResizeObserver / PointerEvent 在 test/setup.ts，经 setupFiles 先于组件加载执行）
 
-vi.mock('~/api/modules/bkmsserver', () => ({
-  ApiServerService: {
-    ListApps: vi.fn().mockResolvedValue([]),
-    GetWorkspace: vi.fn().mockResolvedValue(undefined),
-    GetApp: vi.fn().mockResolvedValue(undefined),
-    // observation.vue fetchApmData 会调用；当前测试环境 store 为空靠前置 guard 短路，
-    // 此处显式 stub，避免未来 guard 调整后以 TypeError 形式挂掉
-    GetApmServiceName: vi.fn().mockResolvedValue(null),
-  },
-}));
-
-// v1 API 模块导出大量 service 且部分子组件在顶层 .bind() 引用：
-// 用自相似 Proxy 兜底——任意导出名均得到可调用、可 bind 的节点（测试路径不触达其返回值）。
-// 注意：symbol/then/__esModule 必须透传 undefined，否则 vi.mock 的 await 会把 factory
-// 结果误判为 thenable 导致 vitest 挂死；模块层须为 object（vitest 校验 factory 返回值）
-vi.mock('~/api/modules/v1', () => {
-  const makeNode = (): unknown =>
-    new Proxy(function stub() {} as unknown as Record<PropertyKey, unknown>, {
-      get: (target, prop) => {
-        if (typeof prop === 'symbol' || prop === 'then' || prop === '__esModule' || prop === 'default') {
-          return undefined;
-        }
-        if (!(prop in target)) {
-          target[prop] = makeNode();
-        }
-        return target[prop];
-      },
-      apply: () => Promise.resolve(undefined),
-    });
-  const moduleCache: Record<PropertyKey, unknown> = {};
-  return new Proxy(moduleCache, {
-    get: (target, prop) => {
-      if (typeof prop === 'symbol' || prop === 'then' || prop === '__esModule') {
-        return undefined;
-      }
-      if (!(prop in target)) {
-        target[prop] = makeNode();
-      }
-      return target[prop];
-    },
-  });
-});
+// API mock 工厂见 helpers/mock-api.ts（§3.7 共享 helpers；同款 mock 亦用于 app-detail-shell）
+vi.mock('~/api/modules/bkmsserver', async () => (await import('./helpers/mock-api')).bkmsserverShellMockFactory());
+vi.mock('~/api/modules/v1', async () => (await import('./helpers/mock-api')).v1ProxyMockFactory());
 
 vi.mock('vue-router', () => {
   const currentRoute = ref({ params: {}, query: {}, name: '' });
@@ -94,6 +55,11 @@ vi.mock('vue-router', () => {
       replace: vi.fn().mockResolvedValue(undefined),
       currentRoute,
     }),
+    // 路由守卫导出：detail.vue:134 的 onBeforeRouteUpdate 在真实包里要求
+    // 「router-view 子组件」上下文，mount 直挂壳层不存在该上下文 → no-op
+    onBeforeRouteUpdate: vi.fn(),
+    onBeforeRouteLeave: vi.fn(),
+    onBeforeRouteEnter: vi.fn(),
   };
 });
 
