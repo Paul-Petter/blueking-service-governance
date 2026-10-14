@@ -53,6 +53,26 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 	})
 
+	Describe("ValidateCreateParams", func() {
+		It("should reject disable enableEnvVarRender", func() {
+			enableEnvVarRender := false
+			err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+				EnableEnvVarRender: &enableEnvVarRender,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("enableEnvVarRender"))
+		})
+
+		It("should reject mountedEnvNames", func() {
+			mountedEnvNames := []string{"prod"}
+			err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+				MountedEnvNames: &mountedEnvNames,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
+		})
+	})
+
 	Describe("GetEnvInstanceStrategy", func() {
 		It("should return overlay strategy", func() {
 			Expect(policy.GetEnvInstanceStrategy()).To(Equal(appcfg.EnvInstanceStrategyOverlay))
@@ -71,6 +91,12 @@ var _ = Describe("FrameworkPolicy", func() {
 	Describe("AllowMountDirUpdate", func() {
 		It("should not allow mount dir update", func() {
 			Expect(policy.AllowMountDirUpdate()).To(BeFalse())
+		})
+	})
+
+	Describe("AllowMountedEnvNamesUpdate", func() {
+		It("should not allow mountedEnvNames update", func() {
+			Expect(policy.AllowMountedEnvNamesUpdate()).To(BeFalse())
 		})
 	})
 
@@ -186,6 +212,12 @@ var _ = Describe("PlainPolicy", func() {
 			})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("overlay"))
+		})
+	})
+
+	Describe("AllowMountedEnvNamesUpdate", func() {
+		It("should allow mountedEnvNames update", func() {
+			Expect(policy.AllowMountedEnvNamesUpdate()).To(BeTrue())
 		})
 	})
 

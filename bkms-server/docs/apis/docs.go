@@ -19137,6 +19137,20 @@ const docTemplate = `{
                 }
             }
         },
+        "appcfgfiledef.BSCPConfigObj": {
+            "type": "object",
+            "properties": {
+                "bizID": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "serviceID": {
+                    "type": "string"
+                }
+            }
+        },
         "appcfgfiledef.BaseContentInfoObj": {
             "type": "object",
             "properties": {
@@ -19203,6 +19217,10 @@ const docTemplate = `{
                     "description": "版本描述",
                     "type": "string"
                 },
+                "enableEnvVarRender": {
+                    "description": "创建时可选设置环境变量渲染开关；不传时使用 ConfigKind 默认值",
+                    "type": "boolean"
+                },
                 "fileFormat": {
                     "description": "文件格式",
                     "type": "string",
@@ -19221,11 +19239,17 @@ const docTemplate = `{
                 },
                 "mountDir": {
                     "description": "容器内挂载目录（plain 必填）",
-                    "type": "string",
-                    "maxLength": 255
+                    "type": "string"
+                },
+                "mountedEnvNames": {
+                    "description": "创建时可选设置挂载环境范围；nil = 全环境生效，空数组 = 不挂载任何环境。环境名格式与路径参数 envName 相同。",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "name": {
-                    "description": "文件名称",
+                    "description": "文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1
@@ -19248,6 +19272,9 @@ const docTemplate = `{
                 },
                 "baseContentInfo": {
                     "$ref": "#/definitions/appcfgfiledef.BaseContentInfoObj"
+                },
+                "bscpConfig": {
+                    "$ref": "#/definitions/appcfgfiledef.BSCPConfigObj"
                 },
                 "configKind": {
                     "type": "string"
@@ -19488,8 +19515,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "mountDir": {
-                    "type": "string",
-                    "maxLength": 255
+                    "type": "string"
                 },
                 "mountedEnvNames": {
                     "type": "array",
@@ -19498,6 +19524,7 @@ const docTemplate = `{
                     }
                 },
                 "name": {
+                    "description": "文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1
@@ -23676,7 +23703,7 @@ const docTemplate = `{
                     ]
                 },
                 "name": {
-                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间。\ntodo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。",
+                    "description": "应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间。\ntodo 兼容前端用特性环境内部名（feat-{appID}-{n}）创建 overlay。",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1
@@ -32339,7 +32366,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "description": "应用配置文件名称，包含大小写字母、数字和符号（_-），长度 1-64 之间",
+                    "description": "应用配置文件名称，仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间",
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 1

@@ -96,16 +96,26 @@ func (s *AppCfgFileDefService) Create(
 func (s *AppCfgFileDefService) createDef(
 	ctx context.Context, params CreateCfgFileParams, kind ConfigKind, policy ConfigKindPolicy,
 ) (*AppConfigFileDef, error) {
+	enableEnvVarRender := policy.DefaultEnableEnvVarRender()
+	if params.EnableEnvVarRender != nil {
+		enableEnvVarRender = *params.EnableEnvVarRender
+	}
+
+	envConfigMode := EnvConfigMode{
+		// 初始创建默认为统一配置
+		IsUnifiedConfig: true,
+	}
+	if params.MountedEnvNames != nil {
+		envConfigMode.MountedEnvNames = *params.MountedEnvNames
+	}
+
 	def := AppConfigFileDef{
-		AppID:      params.AppID,
-		Name:       params.Name,
-		ConfigKind: kind,
-		MountDir:   params.MountDir,
-		EnvConfigMode: EnvConfigMode{
-			// 初始创建默认为统一配置
-			IsUnifiedConfig: true,
-		},
-		EnableEnvVarRender: policy.DefaultEnableEnvVarRender(),
+		AppID:              params.AppID,
+		Name:               params.Name,
+		ConfigKind:         kind,
+		MountDir:           params.MountDir,
+		EnvConfigMode:      envConfigMode,
+		EnableEnvVarRender: enableEnvVarRender,
 		Creator:            params.Creator,
 	}
 	defID, err := s.DefStore.Add(ctx, def)
@@ -162,13 +172,16 @@ func (s *AppCfgFileDefService) UpdateAppCfgFileDef(
 	}
 
 	// 按策略区分
-	if update.MountDir != nil || update.EnableEnvVarRender != nil {
+	if update.MountDir != nil || update.EnableEnvVarRender != nil || update.MountedEnvNames != nil {
 		policy, err := s.policyFor(def.ConfigKind)
 		if err != nil {
 			return errors.Wrap(err, "loading config kind policy for def update")
 		}
 		if update.MountDir != nil && !policy.AllowMountDirUpdate() {
 			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support modifying mountDir via def")
+		}
+		if update.MountedEnvNames != nil && !policy.AllowMountedEnvNamesUpdate() {
+			return errors.Wrap(ErrInvalidConfigSpec, "this config kind does not support mountedEnvNames")
 		}
 		if update.EnableEnvVarRender != nil && !policy.AllowEnableEnvVarRenderUpdate() {
 			return errors.Wrap(ErrInvalidConfigSpec,

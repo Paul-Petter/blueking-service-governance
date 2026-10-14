@@ -70,6 +70,10 @@ type AppConfigFileDefStoreMongo struct {
 // NewAppConfigFileDefStoreMongo 创建 MongoDB 驱动的 def store。
 func NewAppConfigFileDefStoreMongo(client *mongo.Client, dbName string) (*AppConfigFileDefStoreMongo, error) {
 	coll := client.Database(dbName).Collection(defCollectionName)
+	// 索引（由 golang-migrate 维护）：
+	// - 唯一：appID + name
+	// - 唯一（partial，mountDir 非空）：appID + mountDir + name，保证最终挂载路径 Join(mountDir, name) 不重复
+	// - 查询：appID + configKind
 	return &AppConfigFileDefStoreMongo{collection: coll}, nil
 }
 
@@ -141,13 +145,19 @@ func (s *AppConfigFileDefStoreMongo) Update(ctx context.Context, def AppConfigFi
 	if def.ID == bson.NilObjectID {
 		return 0, errors.New("def ID is required for update")
 	}
-	result, err := s.collection.UpdateOne(ctx, bson.M{"_id": def.ID}, bson.M{"$set": bson.M{
-		"name":               def.Name,
-		"mountDir":           def.MountDir,
-		"envConfigMode":      def.EnvConfigMode,
-		"enableEnvVarRender": def.EnableEnvVarRender,
-	}})
+	result, err := s.collection.UpdateOne(ctx, bson.M{"_id": def.ID}, bson.M{
+		"$set": bson.M{
+			"name":               def.Name,
+			"mountDir":           def.MountDir,
+			"isUnifiedConfig":    def.EnvConfigMode.IsUnifiedConfig,
+			"mountedEnvNames":    def.EnvConfigMode.MountedEnvNames,
+			"enableEnvVarRender": def.EnableEnvVarRender,
+		},
+	})
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return 0, errors.New("app config file def already exists")
+		}
 		return 0, err
 	}
 	return result.ModifiedCount, nil

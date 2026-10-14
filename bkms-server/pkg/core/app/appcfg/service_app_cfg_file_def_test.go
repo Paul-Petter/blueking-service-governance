@@ -240,6 +240,70 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(gotDef.EnableEnvVarRender).To(BeFalse())
 		})
+
+		It("should allow plain kind create with mountedEnvNames and EnableEnvVarRender", func() {
+			content := "plain content"
+			mounted := []string{"prod", "staging"}
+			enableRender := true
+			result, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:              f.AppID,
+				EnvName:            appcfg.EnvNameDefault,
+				Name:               "plain-render.conf",
+				MountDir:           "/etc/app",
+				Type:               appcfg.AppConfigFileTypeNormal,
+				ContentSourceType:  appcfg.ContentSourceTypeLocal,
+				Format:             appcfg.FileFormatYAML,
+				Content:            &content,
+				Creator:            "tester",
+				ConfigKind:         appcfg.ConfigKindPlain,
+				MountedEnvNames:    &mounted,
+				EnableEnvVarRender: &enableRender,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Def.EnvConfigMode.IsUnifiedConfig).To(BeTrue())
+			Expect(result.Def.EnvConfigMode.MountedEnvNames).To(Equal(mounted))
+			Expect(result.Def.EnableEnvVarRender).To(BeTrue())
+		})
+
+		It("should reject framework kind create with EnableEnvVarRender=false", func() {
+			content := "key: value"
+			disableRender := false
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:              f.AppID,
+				EnvName:            appcfg.EnvNameDefault,
+				Name:               "fw.yaml",
+				Type:               appcfg.AppConfigFileTypeNormal,
+				ContentSourceType:  appcfg.ContentSourceTypeLocal,
+				Format:             appcfg.FileFormatYAML,
+				Content:            &content,
+				Creator:            "tester",
+				ConfigKind:         appcfg.ConfigKindFramework,
+				EnableEnvVarRender: &disableRender,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("enableEnvVarRender"))
+		})
+
+		It("should reject framework kind create with mountedEnvNames", func() {
+			content := "key: value"
+			mountedEnvNames := []string{"prod"}
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "fw-mounted.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				MountedEnvNames:   &mountedEnvNames,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
+		})
 	})
 
 	Context("UpdateAppCfgFileDef", func() {
@@ -258,6 +322,25 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.Name).To(Equal("new-name.yaml"))
+		})
+
+		It("should reject mountedEnvNames update for framework kind", func() {
+			result := f.createFrameworkFile("fw-mounted.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			mounted := []string{"prod"}
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountedEnvNames: &mounted,
+				Operator:        "editor",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.EnvConfigMode.MountedEnvNames).To(BeNil())
 		})
 
 		It("should reject mountDir update for framework kind", func() {
@@ -303,6 +386,33 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			unchanged, err := f.DefStore.GetByID(f.Ctx, defID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(unchanged.MountDir).To(Equal("/old/path"))
+		})
+
+		It("should allow multiple plain files to share the same mountDir", func() {
+			first := f.createPlainFile("a.conf", "/etc/app", "a: 1")
+			second := f.createPlainFile("b.conf", "/etc/app", "b: 2")
+
+			Expect(first.Def.MountDir).To(Equal("/etc/app"))
+			Expect(second.Def.MountDir).To(Equal("/etc/app"))
+			Expect(first.Def.ID).NotTo(Equal(second.Def.ID))
+		})
+
+		It("should allow updating a plain mountDir to share another file directory", func() {
+			f.createPlainFile("keep.conf", "/etc/app", "keep")
+			movable := f.createPlainFile("move.conf", "/old/path", "move")
+			def, err := f.DefStore.GetByID(f.Ctx, movable.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			shared := "/etc/app"
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountDir: &shared,
+				Operator: "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.MountDir).To(Equal("/etc/app"))
 		})
 
 		It("should allow mountDir update for plain kind", func() {
@@ -379,10 +489,14 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 为 staging 创建环境实例
-			prepared, _, _, err := f.Svc.PrepareEnvContentUpdate(f.Ctx, def, "staging", "key=staging", "editor")
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "staging",
+				Content:     "key=staging",
+				Operator:    "editor",
+				Description: "staging file",
+			})
 			Expect(err).NotTo(HaveOccurred())
-			stagingFile, err := f.Svc.CreateFileWithVersion(f.Ctx, *prepared, def.Name, "staging file", "editor")
-			Expect(err).NotTo(HaveOccurred())
+			stagingFile := upserted.File
 
 			// 缩减 mountedEnvNames 到只有 prod
 			def, err = f.DefStore.GetByID(f.Ctx, def.ID)
@@ -401,6 +515,40 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			// 默认文件仍存在
 			_, err = f.FileStore.GetByID(f.Ctx, result.ID)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should clean up removed env instances when shrinking mountedEnvNames from nil", func() {
+			result := f.createPlainFile("shrink-nil.conf", "/data", "k=v")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			isUnified := false
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				IsUnifiedConfig: &isUnified,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			upserted, err := f.Svc.UpsertEnvContent(f.Ctx, def, appcfg.UpsertEnvContentParams{
+				EnvName:     "staging",
+				Content:     "key=staging",
+				Operator:    "editor",
+				Description: "staging file",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			stagingFile := upserted.File
+
+			def, err = f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			newMounted := []string{"prod"}
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountedEnvNames: &newMounted,
+				Operator:        "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = f.FileStore.GetByID(f.Ctx, stagingFile.ID)
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("should clean up env instances when switching to unified config", func() {
