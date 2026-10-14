@@ -44,7 +44,7 @@
         >
           <Input
             v-model="formData.name"
-            :placeholder="rules.name[0].message"
+            :placeholder="rules.name[1].message"
           />
         </Form.FormItem>
         <Form.FormItem
@@ -285,8 +285,13 @@
   const rules = ref({
     name: [
       {
+        validator: () => !(formData.value.name || '').endsWith('-'),
+        message: t('不能以中划线结尾'),
+        trigger: 'blur',
+      },
+      {
         validator: () => BKMS_REGEX.envNameRegex.test(formData.value.name || ''),
-        message: t('请输入 1-20 个字符小写字母、数字、中划线，以小写字母开头，提交后不可修改'),
+        message: t('请输入 1-20 个字符的小写字母、数字、中划线，以小写字母开头，提交后不可修改'),
         trigger: 'blur',
       },
     ],

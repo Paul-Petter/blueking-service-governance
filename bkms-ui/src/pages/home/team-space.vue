@@ -44,7 +44,7 @@
             class="w-[552px]"
             :maxlength="24"
             :minlength="2"
-            :placeholder="rules.name[0].message"
+            :placeholder="rules.id[1].message"
           />
         </Form.FormItem>
         <Form.FormItem
@@ -353,7 +353,12 @@
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formData);
   const repositoryType = ref<'external' | 'system'>('system');
   const rules = {
-    name: [
+    id: [
+      {
+        validator: () => !(formData.id || '').endsWith('-'),
+        message: t('不能以中划线结尾'),
+        trigger: 'blur',
+      },
       {
         validator: () => BKMS_REGEX.spaceNameRegex.test(formData.id || ''),
         message: t('请输入 1-27 字符的空间 ID，由小写字母、数字、中划线组成，以小写字母开头，提交后不可修改'),

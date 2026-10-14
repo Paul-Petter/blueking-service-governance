@@ -693,9 +693,9 @@ BSCP 配置内容非合法 YAML 格式，无法保存: The BSCP configuration co
 请输入，若留空则默认使用 values.yaml: Please enter, or leave blank to use values.yaml by default
 私有仓库需要填写凭证才能拉取 chart: Private repositories require credentials to pull the chart
 请输入 1-20 个字符的小写字母、数字、中划线，以小写字母开头，提交后不可修改:
-  Please enter 1-20 characters of
-  lowercase letters, numbers, and hyphens, starting with a lowercase letter.
-  This cannot be modified after submitting
+  Enter 1-20 characters using lowercase letters, numbers, or hyphens. Start
+  with a lowercase letter and do not end with a hyphen. This cannot be changed
+  after submission.
 当前空间是绑定已有项目，而非平台新建的项目，暂不支持直接从源码仓库进行构建。:
   The current space is bound to existing
   projects, not newly created projects on the platform, and does not currently
@@ -1156,8 +1156,9 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
 配置文件路径: Configuration File Path
 请输入配置文件名称: Please enter the configuration file name
 请输入 1-20 个字符的小写字母、数字、中划线，以小写字母开头:
-  Please enter 1-20 characters of lowercase
-  letters, numbers, and hyphens, starting with a lowercase letter
+  Enter 1-20 characters using lowercase letters, numbers, or hyphens. Start
+  with a lowercase letter and do not end with a hyphen.
+不能以中划线结尾: Cannot end with a hyphen
 应用 ID: Application ID
 适用于使用 tRPC 协议的服务: Applicable to services using the tRPC protocol
 采用 TAF 框架实现的服务端应用: Services implemented using the TAF framework
