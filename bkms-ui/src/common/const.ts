@@ -33,6 +33,8 @@ export const BKMS_REGEX = {
   envNameRegex: /^[a-z](?:[a-z0-9-]{0,18}[a-z0-9])?$/,
   envDisplayNameRegex: /^.{1,32}$/,
   fileNameRegex: /^[a-zA-Z0-9_-]{1,20}$/,
+  appConfigFileNameRegex: /^[a-zA-Z0-9_.-]{1,64}$/,
+  appConfigMountDirRegex: /^\/(?!\/)[^/]+(?:\/[^/]+)*\/?$/,
   spaceNameRegex: /^[a-z][a-z0-9-]{0,26}[a-z0-9]$/,
   spaceDisplayNameRegex: /^.{1,32}$/,
   instanceNameRegex: /^[a-z][a-z0-9-]{0,18}[a-z0-9]$/,
@@ -92,6 +94,8 @@ export const DOC_LINKS = {
   HOST_PORT: '/p/4036088770',
   // 应用仪表盘配置指引
   DASHBOARD_GUIDE: '/p/4037840772',
+  // 配置文件说明
+  CONFIG_FILE_GUIDE: '/p/4046793147',
 };
 
 /**
