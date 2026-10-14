@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
 	buildserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build/serializer"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -307,6 +308,11 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+		return
+	}
 
 	ctx := c.Request.Context()
 	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
@@ -325,7 +331,7 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		ctx,
 		buildService,
 		app,
-		input.Branch,
+		rev,
 		input.ImageTag,
 		build.StartOptions{},
 	)
@@ -333,8 +339,11 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
 		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
 		errCode := bkerrs.ErrCodeInternalServerError
-		if build.IsImageReferenceInvalid(err) || pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing) {
+		switch {
+		case build.IsImageReferenceInvalid(err) || pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing):
 			errCode = bkerrs.ErrCodeInvalidArgument
+		case pkgerrors.Is(err, revision.ErrRequired):
+			errCode = bkerrs.ErrCodeInvalidRequest
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start and schedule build"))
 		return
@@ -354,7 +363,9 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			appID	path		string	true	"应用 ID"
-//	@Param			branch	query		string	false	"分支/Tag（仅 custom 类型使用）"
+//	@Param			revisionType	query		string	false	"代码来源类型 branch / tag / commit（仅 custom 类型使用）"
+//	@Param			revision		query		string	false	"分支名 / Tag 名 / CommitID（仅 custom 类型使用）"
+//	@Param			branch			query		string	false	"兼容字段：按分支检出，revision 为空时生效"
 //	@Success		200		{object}	buildserializer.GetRecommendedImageTagOutput
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
 //	@Failure		404		{object}	bkerrs.GinErrorOutput
@@ -402,8 +413,10 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 		}
 		imageTag = imagebuild.GenerateRecommendedSemverImageTag(tags)
 	case imagebuild.VersionTypeCustom:
+		// 推荐 Tag 是预览：CommitID 未填完时按空修订出版本号，格式校验留给真正提交构建
+		rev := revision.ResolveForPreview(queryInput.RevisionType, queryInput.Revision, queryInput.Branch)
 		imageTag = imagebuild.GenerateRecommendedCustomImageTag(
-			queryInput.Branch,
+			rev.ImageTagSegment(),
 			time.Now(),
 			cfg.TagConfig.CustomOpts,
 		)
