@@ -25,9 +25,12 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
@@ -165,6 +168,94 @@ var _ = Describe("RecordStoreMongo", func() {
 			recordA.ID = bson.NewObjectID()
 			err := store.Update(ctx, &recordA)
 			Expect(err).To(HaveOccurred())
+		})
+
+		It("should persist batch release fields", func() {
+			strategy := &appmodel.ReleaseStrategySnapshot{
+				ID:   bson.NewObjectID().Hex(),
+				Name: "生产谨慎发布",
+				Batches: []releasestrategy.Batch{
+					{Target: "1", PauseMode: releasestrategy.PauseModePermanent},
+					{Target: "50%", PauseMode: releasestrategy.PauseModeDuration, PauseSeconds: 1800},
+				},
+			}
+			recordA.Status = appmodel.StatusDeploying
+			recordA.ReleaseMode = appmodel.ReleaseModeBatch
+			recordA.ReleaseStrategy = strategy
+			recordID, err := store.Create(ctx, &recordA)
+			Expect(err).NotTo(HaveOccurred())
+
+			record, err := store.Get(ctx, appID, recordID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(record.ReleaseMode).To(Equal(appmodel.ReleaseModeBatch))
+			Expect(record.ReleaseStrategy).To(Equal(strategy))
+			Expect(record.BatchProgress).To(BeNil())
+			Expect(record.IsBatchReleasing()).To(BeTrue())
+
+			// 轮询写入进度，毫秒精度与 Mongo 存储一致
+			pauseStartTime := time.Now().UTC().Truncate(time.Millisecond)
+			progress := &appmodel.BatchProgress{
+				CurrentBatchIndex: lo.ToPtr(int64(0)),
+				BatchPhase:        batchrelease.BatchPhaseManualPaused,
+				RolloutPhase:      "Running",
+				Message:           "Running canary step 0",
+				PauseStartTime:    &pauseStartTime,
+				UpdatedReplicas:   1,
+				Replicas:          4,
+				OldImageTag:       "v1.0.0",
+				NewImageTag:       "v1.1.0",
+			}
+			Expect(store.UpdateBatchProgress(ctx, recordID, progress)).To(Succeed())
+
+			record, err = store.Get(ctx, appID, recordID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(record.BatchProgress).To(Equal(progress))
+			Expect(record.ReleaseStrategy).To(Equal(strategy))
+
+			// 通用 Update 拿着不含进度的快照写回，不能把刚写入的进度盖掉
+			record.BatchProgress = nil
+			record.Message = "still deploying"
+			Expect(store.Update(ctx, record)).To(Succeed())
+
+			record, err = store.Get(ctx, appID, recordID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(record.Message).To(Equal("still deploying"))
+			Expect(record.BatchProgress).To(Equal(progress))
+		})
+
+		It("rejects a nil batch progress and a missing record", func() {
+			Expect(store.UpdateBatchProgress(ctx, bson.NewObjectID().Hex(), nil)).NotTo(Succeed())
+
+			err := store.UpdateBatchProgress(ctx, bson.NewObjectID().Hex(), &appmodel.BatchProgress{
+				BatchPhase: batchrelease.BatchPhasePending,
+			})
+			Expect(err).To(MatchError(appmodel.ErrDeployRecordNotFound))
+		})
+
+		It("should treat records without release mode as releasing all at once", func() {
+			recordA.Status = appmodel.StatusDeploying
+			recordID, err := store.Create(ctx, &recordA)
+			Expect(err).NotTo(HaveOccurred())
+
+			raw := bson.M{}
+			Expect(database.Client().Database(database.Name()).Collection("app_model_deploy_records").
+				FindOne(ctx, bson.M{"_id": lo.Must(bson.ObjectIDFromHex(recordID))}).Decode(&raw)).To(Succeed())
+			Expect(raw).NotTo(HaveKey("releaseMode"))
+			Expect(raw).NotTo(HaveKey("releaseStrategy"))
+			Expect(raw).NotTo(HaveKey("batchProgress"))
+
+			record, err := store.Get(ctx, appID, recordID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(record.GetReleaseMode()).To(Equal(appmodel.ReleaseModeAll))
+			Expect(record.IsBatchReleasing()).To(BeFalse())
+
+			// 状态更新不能给非分批记录补上 batchProgress: null
+			record.Status = appmodel.StatusDeployed
+			Expect(store.Update(ctx, record)).To(Succeed())
+			raw = bson.M{}
+			Expect(database.Client().Database(database.Name()).Collection("app_model_deploy_records").
+				FindOne(ctx, bson.M{"_id": lo.Must(bson.ObjectIDFromHex(recordID))}).Decode(&raw)).To(Succeed())
+			Expect(raw).NotTo(HaveKey("batchProgress"))
 		})
 	})
 
@@ -798,6 +889,19 @@ var _ = Describe("RecordStoreMongo", func() {
 			hasActive, err := store.HasActiveDeployments(ctx, appID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasActive).To(BeFalse())
+		})
+
+		It("should return true when latest record is rolled back", func() {
+			recordA.EnvName = "staging"
+			recordA.TrafficLaneName = "base"
+			recordA.ReleaseMode = appmodel.ReleaseModeBatch
+			recordA.Status = appmodel.StatusRolledBack
+			_, err := store.Create(ctx, &recordA)
+			Expect(err).NotTo(HaveOccurred())
+
+			hasActive, err := store.HasActiveDeployments(ctx, appID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hasActive).To(BeTrue())
 		})
 
 		It("should return true if at least one env-lane has deployed as latest", func() {

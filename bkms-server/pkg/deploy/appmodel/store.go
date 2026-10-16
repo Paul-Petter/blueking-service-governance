@@ -43,8 +43,11 @@ type RecordStore interface {
 	// Create 创建应用部署记录
 	Create(ctx context.Context, record *Record) (string, error)
 
-	// Update 更新应用部署记录
+	// Update 更新应用部署记录。不写 batchProgress，分批进度由 UpdateBatchProgress 定向更新
 	Update(ctx context.Context, record *Record) error
+
+	// UpdateBatchProgress 只更新分批发布进度
+	UpdateBatchProgress(ctx context.Context, id string, progress *BatchProgress) error
 
 	// List 列表应用部署记录（支持分页）
 	List(
@@ -129,6 +132,30 @@ func (s *RecordStoreMongo) Update(ctx context.Context, record *Record) error {
 		return errors.Wrapf(err, "update app model app deploy record %s", record.ID.Hex())
 	}
 	// id 匹配不到数据的情况
+	if ret.MatchedCount == 0 {
+		return ErrDeployRecordNotFound
+	}
+	return nil
+}
+
+// UpdateBatchProgress 只更新分批发布进度，供轮询任务写入。
+// 与 Update 分开：非分批记录的该字段为 nil，放进 Update 的 $set 会被写成 null；
+// 扩缩容、下架等先读再写的路径也会用旧快照覆盖轮询刚写入的进度。
+func (s *RecordStoreMongo) UpdateBatchProgress(ctx context.Context, id string, progress *BatchProgress) error {
+	if progress == nil {
+		return errors.New("batch progress is nil")
+	}
+	oid, err := bson.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.Wrapf(err, "parse deploy record id %s", id)
+	}
+	ret, err := s.collection.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": bson.M{
+		"batchProgress": progress,
+		"updatedAt":     time.Now(),
+	}})
+	if err != nil {
+		return errors.Wrapf(err, "update batch progress of deploy record %s", id)
+	}
 	if ret.MatchedCount == 0 {
 		return ErrDeployRecordNotFound
 	}
@@ -368,13 +395,15 @@ func (s *RecordStoreMongo) ListImageTagDeployedEnvs(
 	return results, nil
 }
 
-// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中或卸载中）
+// HasActiveDeployments 检查是否存在活跃的部署（已部署、部署中、卸载中或分批发布已回滚）
 // 判断逻辑：按环境+泳道分组，获取每组最新记录，检查最新记录是否为活跃状态
 func (s *RecordStoreMongo) HasActiveDeployments(ctx context.Context, appID string) (bool, error) {
 	activeStatuses := bson.A{
 		string(StatusDeployed),
 		string(StatusDeploying),
 		string(StatusUninstalling),
+		// 回滚后工作负载仍在运行（Pod 为旧版本）
+		string(StatusRolledBack),
 	}
 
 	// 使用聚合查询：按 (envName, trafficLaneName) 分组，获取每组最新记录
