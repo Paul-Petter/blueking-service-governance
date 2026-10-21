@@ -1407,6 +1407,7 @@ APM 实例: APM Instance
 流量权重: Traffic Weight
 数据有 15s 左右延迟: Data has approximately 15s delay
 调整权重: Adjust Weight
+更多操作: More Actions
 权重为 0 时 该实例将不再接收流量，权重值修改后将同步到实例下的所有 ServiceName:
   When the weight is 0, the
   instance will no longer receive traffic. The weight value will be synchronized
@@ -1905,6 +1906,8 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 权重在该环境首次部署时生效: The weight takes effect when the environment is deployed for the first time
 权重为 0 时，该环境将不再接收流量: When the weight is 0, this environment will no longer receive traffic
 请输入0-10000之间的整数: Enter an integer from 0 to 10000
+"请输入 0-10000 的整数": "Enter an integer from 0 to 10000"
+权重不能为空: Weight cannot be empty
 设置初始权重: Set Initial Weight
 调整说明: Adjustment Notes
 "数值越大权重越高；保存后按新的单实例权重重算总权重。权重为 {0} 时该环境将不再接收流量。": "A larger value gives a higher weight. After saving, the total weight is recalculated using the new per-instance weight. When the weight is {0}, this environment will no longer receive traffic."
@@ -2204,3 +2207,4 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 该环境已有部署，必须保持可见，不能取消: "This environment has a deployment and must remain visible. It cannot be deselected."
 该环境是特性环境的父环境，必须保持可见，不能取消: "This environment is the parent of a feature environment and must remain visible. It cannot be deselected."
 配置已保存，获取最新配置失败，请刷新页面重试: "Configuration saved, but failed to load the latest configuration. Refresh the page to retry"
+仅对选中实例原地更新镜像 Tag，不重建 Pod、不变更配置。同一环境内允许部分实例使用不同镜像。: Only update the image tag of the selected instances in place, without rebuilding Pods or changing the configuration. Instances in the same environment are allowed to use different images.
