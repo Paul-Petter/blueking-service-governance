@@ -1729,6 +1729,9 @@ definitions:
         items:
           $ref: '#/definitions/serializer.PolarisInstanceInfoOutputObj'
         type: array
+      polarisWeightOverride:
+        description: 北极星权重覆盖值，未单独设置时为空字符串；对该 Pod 注册的所有北极星实例生效
+        type: string
       resources:
         allOf:
         - $ref: '#/definitions/serializer.AppInstanceResourcesObj'

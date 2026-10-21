@@ -21983,6 +21983,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/serializer.PolarisInstanceInfoOutputObj"
                     }
                 },
+                "polarisWeightOverride": {
+                    "description": "北极星权重覆盖值，未单独设置时为空字符串；对该 Pod 注册的所有北极星实例生效",
+                    "type": "string"
+                },
                 "resources": {
                     "description": "主容器资源规格（集群 Pod 实际值）",
                     "allOf": [
