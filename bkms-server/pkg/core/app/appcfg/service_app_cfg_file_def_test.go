@@ -36,6 +36,38 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 	})
 
 	Context("Create", func() {
+		It("should reject a second helm values file in another directory", func() {
+			content := "key: value"
+			_, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "values.yaml",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "helm",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+				AppID:             f.AppID,
+				EnvName:           appcfg.EnvNameDefault,
+				Name:              "values.yaml",
+				MountDir:          "/etc/b",
+				Type:              appcfg.AppConfigFileTypeNormal,
+				ContentSourceType: appcfg.ContentSourceTypeLocal,
+				Format:            appcfg.FileFormatYAML,
+				Content:           &content,
+				Creator:           "tester",
+				ConfigKind:        appcfg.ConfigKindFramework,
+				AppType:           "helm",
+			})
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+		})
+
 		It("should create def, file and initial version", func() {
 			result := f.createFrameworkFile("values.yaml")
 
@@ -439,6 +471,76 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(unchanged.EnvConfigMode.MountedEnvNames).To(BeNil())
+		})
+
+		It("should clean a trailing slash from a plain mountDir", func() {
+			result := f.createPlainFile("slash.conf", "/etc/app/", "content")
+			Expect(result.Def.MountDir).To(Equal("/etc/app"))
+		})
+
+		It("should allow the same file name under different mount dirs", func() {
+			first := f.createPlainFile("app.conf", "/etc/a", "a")
+			second := f.createPlainFile("app.conf", "/etc/b", "b")
+			Expect(first.Def.Name).To(Equal("app.conf"))
+			Expect(second.Def.Name).To(Equal("app.conf"))
+			Expect(first.Def.ID).NotTo(Equal(second.Def.ID))
+		})
+
+		It("should reject a rename onto an existing mount identity", func() {
+			first := f.createPlainFile("a.yaml", "/etc/app", "a")
+			second := f.createPlainFile("b.yaml", "/etc/app", "b")
+			def, err := f.DefStore.GetByID(f.Ctx, second.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			newName := first.Def.Name
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				Name:     &newName,
+				AppType:  "helm",
+				Operator: "editor",
+			})
+			Expect(errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists)).To(BeTrue())
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.Name).To(Equal("b.yaml"))
+		})
+
+		It("should allow mountDir update for a trpc framework file", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			newDir := "/usr/local/trpc/bin/"
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				MountDir: &newDir,
+				AppType:  "trpc",
+				Operator: "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.MountDir).To(Equal("/usr/local/trpc/bin"))
+		})
+
+		It("should reject renaming a trpc framework file", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+			def, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+
+			newName := "other.yaml"
+			err = f.Svc.UpdateAppCfgFileDef(f.Ctx, def, appcfg.FileDefUpdate{
+				Name:     &newName,
+				AppType:  "trpc",
+				Operator: "editor",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("does not allow modifying name"))
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.Name).To(Equal("trpc_go.yaml"))
 		})
 
 		It("should reject mountDir update for framework kind", func() {
@@ -932,5 +1034,246 @@ var _ = Describe("AppCfgFileDefService — Create / Update / Delete", func() {
 			_, err = f.DefStore.GetByID(f.Ctx, defID)
 			Expect(err).NotTo(HaveOccurred())
 		})
+	})
+
+	Context("SyncFrameworkFileLocation", func() {
+		It("should reject an app that does not have exactly one framework def", func() {
+			f.createFrameworkFile("one.yaml")
+			f.createFrameworkFile("two.yaml")
+
+			err := f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "taf", "renamed.yaml", "/etc/app")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("2 framework config files"))
+
+			defs, listErr := appcfg.ListDefsByApp(
+				f.Ctx, f.DefStore, f.AppID, appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
+			)
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(defs).To(ConsistOf(
+				HaveField("Name", "one.yaml"),
+				HaveField("Name", "two.yaml"),
+			))
+		})
+
+		It("should keep the current name and mount dir when both inputs are empty", func() {
+			result := f.createFrameworkFile("keep.yaml")
+			mountDir := "/etc/keep"
+			err := f.Svc.UpdateAppCfgFileDef(f.Ctx, result.Def, appcfg.FileDefUpdate{
+				MountDir: &mountDir,
+				AppType:  "taf",
+				Operator: "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "taf", "", "")
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Name).To(Equal("keep.yaml"))
+			Expect(updated.MountDir).To(Equal("/etc/keep"))
+		})
+
+		It("should reject a framework rename onto an existing mount identity", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+			mountDir := "/etc/app"
+			err := f.Svc.UpdateAppCfgFileDef(f.Ctx, result.Def, appcfg.FileDefUpdate{
+				MountDir: &mountDir,
+				AppType:  "taf",
+				Operator: "editor",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			f.createPlainFile("taken.yaml", "/etc/app", "taken")
+
+			err = f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "taf", "taken.yaml", "")
+			Expect(errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists)).To(BeTrue())
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.Name).To(Equal("trpc_go.yaml"))
+		})
+
+		It("should reject renaming a trpc framework file", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+
+			err := f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "trpc", "other.yaml", "")
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("does not allow modifying name"))
+
+			unchanged, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(unchanged.Name).To(Equal("trpc_go.yaml"))
+			Expect(unchanged.MountDir).To(BeEmpty())
+		})
+
+		It("should update only the mount dir", func() {
+			result := f.createFrameworkFile("trpc_go.yaml")
+
+			err := f.Svc.SyncFrameworkFileLocation(f.Ctx, f.AppID, "trpc", "", "/usr/local/trpc/bin/")
+			Expect(err).NotTo(HaveOccurred())
+
+			updated, err := f.DefStore.GetByID(f.Ctx, result.Def.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.Name).To(Equal("trpc_go.yaml"))
+			Expect(updated.MountDir).To(Equal("/usr/local/trpc/bin"))
+		})
+	})
+})
+
+var _ = Describe("AppCfgFileDefService — UpdateHelmFile", func() {
+	var f *defServiceFixture
+
+	BeforeEach(func() {
+		f = setupDefServiceFixture()
+	})
+
+	It("should rename without writing a file version", func() {
+		created := f.createFrameworkFile("values.yaml")
+		def, err := f.DefStore.GetByID(f.Ctx, created.Def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		file, err := f.FileStore.GetByID(f.Ctx, created.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := f.Svc.UpdateHelmFile(f.Ctx, def, file, appcfg.HelmFileUpdate{
+			Name:     "values-b.yaml",
+			AppType:  "helm",
+			Operator: "editor",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.NameChanged).To(BeTrue())
+		Expect(result.FileChanged).To(BeFalse())
+
+		updated, err := f.DefStore.GetByID(f.Ctx, def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated.Name).To(Equal("values-b.yaml"))
+		reloaded, err := f.FileStore.GetByID(f.Ctx, file.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(reloaded.CurrentVersion).To(Equal(int64(1)))
+		versions, err := f.Svc.ListVersions(f.Ctx, f.AppID, 1, 10, appcfg.VersionsByFile(file.ID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(versions.Total).To(Equal(int64(1)))
+		Expect(versions.Items[0].Name).To(Equal("values.yaml"))
+		Expect(versions.Items[0].Version).To(Equal(int64(1)))
+	})
+
+	It("should reject a rename onto an existing mount identity without writing a version", func() {
+		first := f.createFrameworkFile("a.yaml")
+		second := f.createFrameworkFile("b.yaml")
+		def, err := f.DefStore.GetByID(f.Ctx, second.Def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		file, err := f.FileStore.GetByID(f.Ctx, second.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = f.Svc.UpdateHelmFile(f.Ctx, def, file, appcfg.HelmFileUpdate{
+			Name:     first.Def.Name,
+			AppType:  "helm",
+			Operator: "editor",
+		})
+		Expect(errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists)).To(BeTrue())
+
+		unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(unchanged.Name).To(Equal("b.yaml"))
+		reloaded, err := f.FileStore.GetByID(f.Ctx, file.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(reloaded.CurrentVersion).To(Equal(int64(1)))
+	})
+
+	It("should reject renaming a trpc framework file", func() {
+		created := f.createFrameworkFile("trpc_go.yaml")
+		def, err := f.DefStore.GetByID(f.Ctx, created.Def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		file, err := f.FileStore.GetByID(f.Ctx, created.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = f.Svc.UpdateHelmFile(f.Ctx, def, file, appcfg.HelmFileUpdate{
+			Name:     "other.yaml",
+			AppType:  "trpc",
+			Operator: "editor",
+		})
+		Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+
+		unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(unchanged.Name).To(Equal("trpc_go.yaml"))
+	})
+
+	It("should write a version when the overlay base changes", func() {
+		base := f.createFrameworkFile("base.yaml")
+		other := f.createFrameworkFile("other.yaml")
+		overlayContent := "foo: bar"
+		overlay, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+			AppID:               f.AppID,
+			EnvName:             appcfg.EnvNameDefault,
+			Name:                "overlay.yaml",
+			Type:                appcfg.AppConfigFileTypeOverlay,
+			ContentSourceType:   appcfg.ContentSourceTypeLocal,
+			Format:              appcfg.FileFormatYAML,
+			BaseAppConfigFileID: &base.ID,
+			OverlayContent:      &overlayContent,
+			Creator:             "tester",
+			ConfigKind:          appcfg.ConfigKindFramework,
+			AppType:             "helm",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		def, err := f.DefStore.GetByID(f.Ctx, overlay.Def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		file, err := f.FileStore.GetByID(f.Ctx, overlay.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := f.Svc.UpdateHelmFile(f.Ctx, def, file, appcfg.HelmFileUpdate{
+			Name:                def.Name,
+			BaseAppConfigFileID: &other.ID,
+			AppType:             "helm",
+			Operator:            "editor",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.NameChanged).To(BeFalse())
+		Expect(result.FileChanged).To(BeTrue())
+		Expect(file.CurrentVersion).To(Equal(int64(2)))
+		Expect(file.BaseAppConfigFileID.Hex()).To(Equal(other.ID.Hex()))
+	})
+
+	It("should restore the name when the file update fails", func() {
+		base := f.createFrameworkFile("base.yaml")
+		other := f.createFrameworkFile("other.yaml")
+		overlayContent := "foo: bar"
+		overlay, err := f.Svc.Create(f.Ctx, appcfg.CreateCfgFileParams{
+			AppID:               f.AppID,
+			EnvName:             appcfg.EnvNameDefault,
+			Name:                "overlay.yaml",
+			Type:                appcfg.AppConfigFileTypeOverlay,
+			ContentSourceType:   appcfg.ContentSourceTypeLocal,
+			Format:              appcfg.FileFormatYAML,
+			BaseAppConfigFileID: &base.ID,
+			OverlayContent:      &overlayContent,
+			Creator:             "tester",
+			ConfigKind:          appcfg.ConfigKindFramework,
+			AppType:             "helm",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		def, err := f.DefStore.GetByID(f.Ctx, overlay.Def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		file, err := f.FileStore.GetByID(f.Ctx, overlay.ID)
+		Expect(err).NotTo(HaveOccurred())
+
+		staleVersion := file.CurrentVersion + 1
+		_, err = f.Svc.UpdateHelmFile(f.Ctx, def, file, appcfg.HelmFileUpdate{
+			Name:                   "renamed.yaml",
+			BaseAppConfigFileID:    &other.ID,
+			AppType:                "helm",
+			Operator:               "editor",
+			ExpectedCurrentVersion: &staleVersion,
+		})
+		Expect(errors.Is(err, appcfg.ErrAppConfigFileVersionConflict)).To(BeTrue())
+
+		unchanged, err := f.DefStore.GetByID(f.Ctx, def.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(unchanged.Name).To(Equal("overlay.yaml"))
+		reloaded, err := f.FileStore.GetByID(f.Ctx, file.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(reloaded.CurrentVersion).To(Equal(int64(1)))
+		Expect(reloaded.BaseAppConfigFileID.Hex()).To(Equal(base.ID.Hex()))
 	})
 })

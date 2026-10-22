@@ -19,6 +19,8 @@
 package appcfg_test
 
 import (
+	"errors"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -71,6 +73,32 @@ var _ = Describe("FrameworkPolicy", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("mountedEnvNames"))
 		})
+
+		DescribeTable("should reject a mount dir unless the app type allows it",
+			func(appType string) {
+				err := policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+					AppType:  appType,
+					MountDir: "/etc/a",
+				})
+				Expect(err).To(HaveOccurred())
+				Expect(errors.Is(err, appcfg.ErrInvalidConfigSpec)).To(BeTrue())
+				Expect(err.Error()).To(ContainSubstring("mountDir"))
+			},
+			Entry("helm", "helm"),
+			Entry("agones", "agones"),
+			Entry("empty app type", ""),
+		)
+
+		DescribeTable("should allow a framework file to set a mount dir",
+			func(appType string) {
+				Expect(policy.ValidateCreateParams(appcfg.CreateCfgFileParams{
+					AppType:  appType,
+					MountDir: "/usr/local/trpc/bin",
+				})).To(Succeed())
+			},
+			Entry("trpc", "trpc"),
+			Entry("taf", "taf"),
+		)
 	})
 
 	Describe("InitializeEnvConfigMode", func() {
@@ -130,9 +158,27 @@ var _ = Describe("FrameworkPolicy", func() {
 		})
 	})
 
+	Describe("AllowNameUpdate", func() {
+		It("should not allow renaming a trpc framework file", func() {
+			Expect(policy.AllowNameUpdate("trpc")).To(BeFalse())
+		})
+
+		It("should allow renaming taf and helm framework files", func() {
+			Expect(policy.AllowNameUpdate("taf")).To(BeTrue())
+			Expect(policy.AllowNameUpdate("helm")).To(BeTrue())
+			Expect(policy.AllowNameUpdate("")).To(BeTrue())
+		})
+	})
+
 	Describe("AllowMountDirUpdate", func() {
-		It("should not allow mount dir update", func() {
-			Expect(policy.AllowMountDirUpdate()).To(BeFalse())
+		It("should not allow mount dir update for helm", func() {
+			Expect(policy.AllowMountDirUpdate("helm")).To(BeFalse())
+			Expect(policy.AllowMountDirUpdate("")).To(BeFalse())
+		})
+
+		It("should allow mount dir update for trpc and taf", func() {
+			Expect(policy.AllowMountDirUpdate("trpc")).To(BeTrue())
+			Expect(policy.AllowMountDirUpdate("taf")).To(BeTrue())
 		})
 	})
 
