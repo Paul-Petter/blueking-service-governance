@@ -841,12 +841,16 @@ func (b *Builder) ComputeAppModel(
 	// 检查：不是生产环境，且启用了开发模式
 	b.devModeConfig = nil
 	if shouldEnableDevModeInEnv(env.Type, effectiveAppSpec) {
-		b.devModeConfig = devmode.CreateDevModeConfig(appModel, env.Type, true)
+		devModeProps, err := devmode.RequireProps(b.app)
+		if err != nil {
+			return nil, errors.Wrap(err, "resolve dev mode props")
+		}
+		b.devModeConfig = devmode.CreateDevModeConfig(appModel, devModeProps, env.Type, true)
 		if effectiveAppSpec.DevMode.WorkPath != nil {
-			b.devModeConfig.WorkPath = *effectiveAppSpec.DevMode.WorkPath
+			b.devModeConfig.Props.WorkPath = *effectiveAppSpec.DevMode.WorkPath
 		}
 		if effectiveAppSpec.DevMode.MountPath != nil {
-			b.devModeConfig.MountPath = *effectiveAppSpec.DevMode.MountPath
+			b.devModeConfig.Props.MountPath = *effectiveAppSpec.DevMode.MountPath
 		}
 	}
 

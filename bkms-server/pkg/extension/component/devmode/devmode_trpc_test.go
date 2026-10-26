@@ -36,10 +36,9 @@ var _ = Describe("DevMode Component TRPC", func() {
 				config := &devmode.Config{
 					Enabled:        true,
 					EnvType:        devmode.EnvTypeProduction,
-					AppType:        bkmsapp.AppTypeTRPC,
+					Props:          trpcProps(),
 					AppName:        "test-app",
 					StartupCommand: "./app",
-					TrpcBinaryPath: "/usr/local/trpc/bin",
 				}
 				builder := devmode.New(config)
 				output, err := builder.Build()
@@ -51,9 +50,8 @@ var _ = Describe("DevMode Component TRPC", func() {
 				config := &devmode.Config{
 					Enabled:        true,
 					EnvType:        devmode.EnvTypeDevelopment,
-					AppType:        bkmsapp.AppTypeTRPC,
+					Props:          trpcProps(),
 					AppName:        "test-app",
-					TrpcBinaryPath: "/usr/local/trpc/bin",
 					StartupCommand: "./test-app",
 				}
 				builder := devmode.New(config)
@@ -70,9 +68,8 @@ var _ = Describe("DevMode Component TRPC", func() {
 				config := &devmode.Config{
 					Enabled:        true,
 					EnvType:        devmode.EnvTypeDevelopment,
-					AppType:        bkmsapp.AppTypeTRPC,
+					Props:          trpcProps(),
 					AppName:        "test-app",
-					TrpcBinaryPath: "/usr/local/trpc/bin",
 					StartupCommand: "./test-app",
 				}
 				builder := devmode.New(config)
@@ -85,9 +82,8 @@ var _ = Describe("DevMode Component TRPC", func() {
 				config := &devmode.Config{
 					Enabled:          true,
 					EnvType:          devmode.EnvTypeDevelopment,
-					AppType:          bkmsapp.AppTypeTRPC,
+					Props:            trpcProps(),
 					AppName:          "test-app",
-					TrpcBinaryPath:   "/usr/local/trpc/bin",
 					StartupShCommand: script,
 				}
 				output, err := devmode.New(config).Build()
@@ -103,11 +99,10 @@ var _ = Describe("DevMode Component TRPC", func() {
 		Context("New", func() {
 			It("should use custom mount path when specified", func() {
 				config := &devmode.Config{
-					Enabled:        true,
-					EnvType:        devmode.EnvTypeDevelopment,
-					AppType:        bkmsapp.AppTypeTRPC,
-					AppName:        "test-app",
-					TrpcBinaryPath: "/usr/local/trpc/bin",
+					Enabled: true,
+					EnvType: devmode.EnvTypeDevelopment,
+					Props:   trpcProps(),
+					AppName: "test-app",
 				}
 				builder := devmode.New(config)
 				volumeMount := builder.BuildVolumeMount()
@@ -118,8 +113,7 @@ var _ = Describe("DevMode Component TRPC", func() {
 		Context("test enabled", func() {
 			It("should return nil without error", func() {
 				config := &devmode.Config{
-					Enabled:        false,
-					TrpcBinaryPath: "/usr/local/trpc/bin",
+					Enabled: false,
 				}
 				builder := devmode.New(config)
 				output, err := builder.Build()
@@ -129,11 +123,10 @@ var _ = Describe("DevMode Component TRPC", func() {
 
 			It("should return false for production environment", func() {
 				config := &devmode.Config{
-					Enabled:        true,
-					EnvType:        devmode.EnvTypeProduction,
-					AppType:        bkmsapp.AppTypeTRPC,
-					TrpcBinaryPath: "/usr/local/trpc/bin",
-					AppName:        "test-app",
+					Enabled: true,
+					EnvType: devmode.EnvTypeProduction,
+					Props:   trpcProps(),
+					AppName: "test-app",
 				}
 				builder := devmode.New(config)
 				Expect(builder.IsAllowed()).To(BeFalse())
@@ -141,11 +134,10 @@ var _ = Describe("DevMode Component TRPC", func() {
 
 			It("should return false for unknown environment type", func() {
 				config := &devmode.Config{
-					Enabled:        true,
-					EnvType:        "unknown",
-					AppType:        bkmsapp.AppTypeTRPC,
-					TrpcBinaryPath: "/usr/local/trpc/bin",
-					AppName:        "test-app",
+					Enabled: true,
+					EnvType: "unknown",
+					Props:   trpcProps(),
+					AppName: "test-app",
 				}
 				builder := devmode.New(config)
 				Expect(builder.IsAllowed()).To(BeFalse())
@@ -153,11 +145,10 @@ var _ = Describe("DevMode Component TRPC", func() {
 
 			It("should return false for empty environment type", func() {
 				config := &devmode.Config{
-					Enabled:        true,
-					EnvType:        "",
-					AppType:        bkmsapp.AppTypeTRPC,
-					TrpcBinaryPath: "/usr/local/trpc/bin",
-					AppName:        "test-app",
+					Enabled: true,
+					EnvType: "",
+					Props:   trpcProps(),
+					AppName: "test-app",
 				}
 				builder := devmode.New(config)
 				Expect(builder.IsAllowed()).To(BeFalse())
@@ -165,11 +156,10 @@ var _ = Describe("DevMode Component TRPC", func() {
 
 			It("should return error when app name is empty", func() {
 				config := &devmode.Config{
-					Enabled:        true,
-					EnvType:        devmode.EnvTypeDevelopment,
-					AppType:        bkmsapp.AppTypeTRPC,
-					TrpcBinaryPath: "/usr/local/trpc/bin",
-					AppName:        "",
+					Enabled: true,
+					EnvType: devmode.EnvTypeDevelopment,
+					Props:   trpcProps(),
+					AppName: "",
 				}
 				builder := devmode.New(config)
 				err := builder.Validate()
@@ -181,9 +171,8 @@ var _ = Describe("DevMode Component TRPC", func() {
 				config := &devmode.Config{
 					Enabled:        true,
 					EnvType:        devmode.EnvTypeDevelopment,
-					AppType:        bkmsapp.AppTypeTRPC,
+					Props:          trpcProps(),
 					AppName:        "test-app",
-					TrpcBinaryPath: "/usr/local/trpc/bin",
 					StartupCommand: "./app",
 				}
 				builder := devmode.New(config)
@@ -194,9 +183,8 @@ var _ = Describe("DevMode Component TRPC", func() {
 				config := &devmode.Config{
 					Enabled:        true,
 					EnvType:        devmode.EnvTypeTest,
-					AppType:        bkmsapp.AppTypeTRPC,
+					Props:          trpcProps(),
 					AppName:        "test-app",
-					TrpcBinaryPath: "/usr/local/trpc/bin",
 					StartupCommand: "./app",
 				}
 				builder := devmode.New(config)
@@ -207,9 +195,8 @@ var _ = Describe("DevMode Component TRPC", func() {
 				config := &devmode.Config{
 					Enabled:        true,
 					EnvType:        devmode.EnvTypeStaging,
-					AppType:        bkmsapp.AppTypeTRPC,
+					Props:          trpcProps(),
 					AppName:        "test-app",
-					TrpcBinaryPath: "/usr/local/trpc/bin",
 					StartupCommand: "./app",
 				}
 				builder := devmode.New(config)
@@ -218,11 +205,10 @@ var _ = Describe("DevMode Component TRPC", func() {
 
 			It("should return true for staging environment IsAllowed", func() {
 				config := &devmode.Config{
-					Enabled:        true,
-					EnvType:        devmode.EnvTypeStaging,
-					AppType:        bkmsapp.AppTypeTRPC,
-					TrpcBinaryPath: "/usr/local/trpc/bin",
-					AppName:        "test-app",
+					Enabled: true,
+					EnvType: devmode.EnvTypeStaging,
+					Props:   trpcProps(),
+					AppName: "test-app",
 				}
 				builder := devmode.New(config)
 				Expect(builder.IsAllowed()).To(BeTrue())
@@ -238,10 +224,9 @@ var _ = Describe("DevMode Component TRPC", func() {
 			config := &devmode.Config{
 				Enabled:        true,
 				EnvType:        devmode.EnvTypeDevelopment,
-				AppType:        bkmsapp.AppTypeTRPC,
+				Props:          trpcProps(),
 				AppName:        "test-app",
 				StartupCommand: "./app",
-				TrpcBinaryPath: "/usr/local/trpc/bin",
 			}
 			builder := devmode.New(config)
 			command := builder.BuildCommand()
@@ -253,10 +238,9 @@ var _ = Describe("DevMode Component TRPC", func() {
 			config := &devmode.Config{
 				Enabled:        true,
 				EnvType:        devmode.EnvTypeDevelopment,
-				AppType:        bkmsapp.AppTypeTRPC,
+				Props:          trpcProps(),
 				AppName:        "test-app",
 				StartupCommand: "./app",
-				TrpcBinaryPath: "/usr/local/trpc/bin",
 			}
 			builder := devmode.New(config)
 			command := builder.BuildCommand()
@@ -268,15 +252,38 @@ var _ = Describe("DevMode Component TRPC", func() {
 			config := &devmode.Config{
 				Enabled:        true,
 				EnvType:        devmode.EnvTypeDevelopment,
-				AppType:        bkmsapp.AppTypeTRPC,
+				Props:          trpcProps(),
 				AppName:        "test-app",
 				StartupCommand: "./app",
-				TrpcBinaryPath: "/usr/local/trpc/bin",
 			}
 			builder := devmode.New(config)
 			command := builder.BuildCommand()
 			Expect(command).To(HaveLen(1))
 			Expect(command[0]).To(Equal("/data/bkms/dev-mode/trpc/configmap-scripts/init.sh"))
 		})
+	})
+})
+
+var _ = Describe("Unsupported stack", func() {
+	It("should reject an enabled config without capability props", func() {
+		config := &devmode.Config{
+			Enabled:        true,
+			EnvType:        devmode.EnvTypeDevelopment,
+			AppName:        "test-app",
+			StartupCommand: "./test-app",
+		}
+		_, err := devmode.New(config).Build()
+		Expect(err).To(MatchError(devmode.ErrUnsupportedAppType))
+	})
+
+	It("should return props for a trpc app", func() {
+		props, err := devmode.RequireProps(&bkmsapp.Application{ID: "trpc-app", Type: bkmsapp.AppTypeTRPC})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(props.WorkPath).To(Equal(devmode.TrpcWorkPath))
+	})
+
+	It("should reject an app whose stack does not support dev mode", func() {
+		_, err := devmode.RequireProps(&bkmsapp.Application{ID: "helm-app", Type: bkmsapp.AppTypeHelm})
+		Expect(err).To(MatchError(devmode.ErrUnsupportedAppType))
 	})
 })

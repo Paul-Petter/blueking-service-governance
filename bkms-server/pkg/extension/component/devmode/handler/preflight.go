@@ -38,6 +38,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bcstoken"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
@@ -202,7 +203,11 @@ func (h *Handler) getEffectiveDevMode(
 			"devmode is not enabled for app %s in environment %s", app.ID, envName,
 		)
 	}
-	devModeSpec.SetPathsByAppType(app.Type)
+	props, err := devmode.RequireProps(app)
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "dev mode")
+	}
+	devModeSpec.SetPaths(props.WorkPath, props.MountPath)
 
 	return devModeSpec, nil
 }

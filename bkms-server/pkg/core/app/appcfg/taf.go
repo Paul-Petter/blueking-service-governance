@@ -26,6 +26,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+// validateTAFContent 用 TAF 解析器解析内容。TAF 解析器较宽松，主要用于避免把 TAF 内容按 YAML 校验拒绝。
+func validateTAFContent(content string) error {
+	cfg := conf.New()
+	if err := cfg.InitFromString(content); err != nil {
+		return errors.Wrap(err, "parse TAF content")
+	}
+	return nil
+}
+
 // mergeTAFContent merges two TAF contents, with overlay taking precedence over base.
 // TAF format only supports simple merge, overlay values replace base values.
 //

@@ -20,8 +20,11 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
+	componentdevmode "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/serializer"
 )
@@ -79,7 +82,7 @@ func (h *Handler) GetEnvEffectiveAppSpecDevMode(c *gin.Context) {
 //	@Failure	404		{object}	bkerrs.GinErrorOutput
 //	@Router		/apps/{appID}/envs/{envName}/app-spec/dev-mode [put]
 func (h *Handler) SetEnvAppSpecDevMode(c *gin.Context) {
-	setEnvSection(h, c, appspec.DevModeSection, "dev mode", envDevModeInput)
+	setEnvSectionChecked(h, c, appspec.DevModeSection, "dev mode", envDevModeInput)
 }
 
 // DeleteEnvAppSpecDevMode 删除应用在某环境下的 devMode section 配置。
@@ -104,12 +107,24 @@ func devModeOutput(
 	spec *appspec.DevModeSpec,
 	app *bkmsapp.Application,
 ) *serializer.AppSpecDevModeOutput {
-	return new(serializer.AppSpecDevModeOutput).FromModel(spec, app.Type)
+	props := devModeProps(app)
+	return new(serializer.AppSpecDevModeOutput).FromModel(spec, props.WorkPath, props.MountPath)
 }
 
+// envDevModeInput 转换写入参数。应用的技术栈不支持开发模式时，拒绝开启。
 func envDevModeInput(
 	input serializer.SetEnvAppSpecDevModeInput,
 	app *bkmsapp.Application,
-) *appspec.DevModeSpec {
-	return input.AppSpecDevMode.ToModel(app.Type)
+) (*appspec.DevModeSpec, error) {
+	props, err := componentdevmode.RequireProps(app)
+	if err != nil && input.AppSpecDevMode != nil && input.AppSpecDevMode.Enabled {
+		return nil, errors.Wrap(err, "enable dev mode")
+	}
+	return input.AppSpecDevMode.ToModel(props.WorkPath, props.MountPath), nil
+}
+
+// devModeProps 取应用的能力参数；技术栈非法或不支持开发模式时返回零值，由渲染阶段给出能力错误。
+func devModeProps(app *bkmsapp.Application) mods.DevModeProps {
+	set := mods.Of(app)
+	return set.DevMode.Props
 }
