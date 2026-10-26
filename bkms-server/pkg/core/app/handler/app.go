@@ -701,26 +701,15 @@ func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
 		return
 	}
 
-	stdEnvs, err := store.Of(h.registry.DB, envmodel.EnvMeta).
-		List(ctx, envmodel.StdEnvsIn(app.WorkspaceID), envmodel.NewestFirst())
+	envs, err := store.Of(h.registry.DB, envmodel.EnvMeta).
+		List(ctx, envmodel.InWorkspace(app.WorkspaceID), envmodel.AvailableToApp(app.ID), envmodel.NewestFirst())
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list standard envs"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app envs"))
 		return
 	}
-	stdNames := lo.SliceToMap(stdEnvs, func(env envmodel.Environment) (string, struct{}) {
-		return env.Name, struct{}{}
-	})
 	names := *input.VisibleEnvNames
-	invalid := lo.Filter(names, func(name string, _ int) bool {
-		_, ok := stdNames[name]
-		return !ok
-	})
-	if len(invalid) > 0 {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"invalid visible environment name(s): %s",
-			strings.Join(invalid, ", "),
-		))
+	if err = validateVisibleEnvs(app.ID, names, envs); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -747,6 +736,59 @@ func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
 	)
 
 	ginutils.OK(c, serializer.EmptyOutput{})
+}
+
+// validateVisibleEnvs 校验可见名单；envs 为工作空间的标准环境及当前应用的特性环境。
+func validateVisibleEnvs(appID string, names []string, envs []envmodel.Environment) error {
+	// 空名单表示全部可见，不会隐藏任何环境。
+	if len(names) == 0 {
+		return nil
+	}
+	// 提交的名单只能包含存在的标准环境。
+	envByName := lo.SliceToMap(envs, func(env envmodel.Environment) (string, envmodel.Environment) {
+		return env.Name, env
+	})
+	var invalid []string
+	for _, name := range names {
+		env, exists := envByName[name]
+		if !exists {
+			invalid = append(invalid, name+" (environment does not exist)")
+		} else if env.IsFeatureEnv() {
+			invalid = append(invalid, name+" (feature environments are not allowed)")
+		}
+	}
+	if len(invalid) > 0 {
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidRequest,
+			"invalid visible environment name(s): %s",
+			strings.Join(invalid, ", "),
+		)
+	}
+
+	// 未选中的标准环境不能已有部署，也不能是特性环境的父环境。
+	for _, env := range envs {
+		if env.IsFeatureEnv() || lo.Contains(names, env.Name) {
+			continue
+		}
+		// AppIDs 在尝试部署时加入，卸载成功后移除，覆盖部署中、失败和成功。
+		if lo.Contains(env.AppIDs, appID) {
+			return bkerrs.Errorf(
+				bkerrs.ErrCodeInvalidRequest,
+				"environment %q has a deployment and must remain visible",
+				env.Name,
+			)
+		}
+		if lo.ContainsBy(envs, func(featureEnv envmodel.Environment) bool {
+			return featureEnv.IsFeatureEnv() && featureEnv.SourceEnvID == env.ID
+		}) {
+			return bkerrs.Errorf(
+				bkerrs.ErrCodeInvalidRequest,
+				"environment %q is the parent of a feature environment and must remain visible",
+				env.Name,
+			)
+		}
+	}
+	return nil
 }
 
 // GetAppDeployStatuses 查询应用在各环境及各泳道上的部署状态。
