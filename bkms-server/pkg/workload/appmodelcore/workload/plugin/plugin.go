@@ -30,10 +30,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 )
+
+// frameworkPlugins 框架到渲染插件的对应关系。blank 没有框架专属资源，使用 standard 插件。
+var frameworkPlugins = map[string]string{
+	appruntime.FrameworkTRPC:  appmodel.WorkloadTypeTrpc,
+	appruntime.FrameworkTAF:   appmodel.WorkloadTypeTaf,
+	appruntime.FrameworkBlank: appmodel.WorkloadTypeStandard,
+}
 
 // RenderContext shares env vars and undefined-reference collection across renderers in one build.
 type RenderContext struct {
@@ -107,20 +115,18 @@ func MustRegisterWorkloadPlugin(plugin WorkloadPlugin) {
 	}
 }
 
-// GetWorkloadPlugin retrieves a registered workload plugin by its type.
-// Args:
-//   - workloadType: the workload type string.
-func GetWorkloadPlugin(workloadType string) (WorkloadPlugin, error) {
-	// Default to trpc plugin for backward compatibility.
-	if workloadType == "" {
-		workloadType = appmodel.WorkloadTypeTrpc
+// GetFrameworkPlugin 按应用框架取渲染插件。框架为空（技术栈非法）或未知时返回错误。
+func GetFrameworkPlugin(framework string) (WorkloadPlugin, error) {
+	workloadType, ok := frameworkPlugins[framework]
+	if !ok {
+		return nil, errors.Errorf("no workload plugin for framework %q", framework)
 	}
 
 	workloadPlugins.mu.RLock()
 	defer workloadPlugins.mu.RUnlock()
 	plugin, ok := workloadPlugins.plugins[workloadType]
 	if !ok {
-		return nil, errors.Errorf("unsupported workload type %q", workloadType)
+		return nil, errors.Errorf("workload plugin %q is not registered", workloadType)
 	}
 	return plugin, nil
 }
