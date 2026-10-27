@@ -20,10 +20,14 @@ package build
 
 import (
 	"context"
+	"slices"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -124,4 +128,47 @@ func UpdateRecord(ctx context.Context, records *RecordStore, record *Record) err
 		return errors.Wrapf(err, "update app %s build record %s", record.AppID, record.BuildID)
 	}
 	return nil
+}
+
+// UpdateRecordImageDigest 回写构建产物的镜像 digest，仅在尚未记录时写入，先写入的生效。
+// 记录不存在或已记录过 digest 时返回 ErrRecordNotFound
+func UpdateRecordImageDigest(ctx context.Context, records *RecordStore, appID, buildID, digest string) error {
+	if err := records.Update(
+		ctx, &Record{ImageDigest: digest}, store.UpdateSelected("imageDigest"),
+		ByBuild(appID, buildID), store.Where("imageDigest", bson.M{"$in": bson.A{nil, ""}}),
+	); err != nil {
+		return errors.Wrapf(err, "update app %s build record %s image digest", appID, buildID)
+	}
+	return nil
+}
+
+// LatestSucceededRecordsByImages 找出产出各镜像的成功构建记录，digestByTag 为镜像 tag 到 digest 的映射，
+// 返回 tag 到构建记录的映射，关联不上的 tag 不出现在结果中。
+//
+// 构建缓存全部命中时，不同 tag 的构建可能产出同一 digest，因此 tag 与 digest 须成对匹配；同一 tag 多条命中时取最近结束的。
+// 查询只能用到索引的 appID 前缀，单个应用的构建记录量有限，不另建索引
+func LatestSucceededRecordsByImages(
+	ctx context.Context, records *RecordStore, appID string, digestByTag map[string]string,
+) (map[string]*Record, error) {
+	tagField := "params." + pipelineparam.ImageTag
+	tags := lo.Keys(lo.OmitByValues(digestByTag, []string{""}))
+	if len(tags) == 0 {
+		return map[string]*Record{}, nil
+	}
+	// 排序只为让生成的过滤条件稳定
+	slices.Sort(tags)
+	pairs := lo.Map(tags, func(tag string, _ int) bson.D {
+		return bson.D{{Key: tagField, Value: tag}, {Key: "imageDigest", Value: digestByTag[tag]}}
+	})
+	list, err := records.ListLatestBy(
+		ctx, []string{tagField},
+		ByApp(appID),
+		store.Where("status", StatusSuccess),
+		store.Where("$or", pairs),
+		store.Desc("endedAt"),
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list app %s latest succeeded build records by images", appID)
+	}
+	return lo.SliceToMap(list, func(r Record) (string, *Record) { return r.Params[pipelineparam.ImageTag], &r }), nil
 }

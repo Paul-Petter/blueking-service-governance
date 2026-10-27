@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
@@ -310,6 +311,98 @@ var _ = Describe("RecordStore", func() {
 			Expect(page.Total).To(Equal(int64(1)))
 			Expect(page.Items).To(HaveLen(1))
 			Expect(page.Items[0].Operator).To(Equal("admin"))
+		})
+	})
+
+	Context("Image digest", func() {
+		newSucceeded := func(buildID, tag, digest string, endedAt time.Time) *Record {
+			return &Record{
+				WorkspaceID: workspaceID,
+				AppID:       appID,
+				BuildID:     buildID,
+				Params:      map[string]string{pipelineparam.ImageTag: tag},
+				Status:      StatusSuccess,
+				ImageDigest: digest,
+				EndedAt:     endedAt,
+			}
+		}
+
+		It("should update image digest without touching other fields", func() {
+			Expect(CreateRecord(ctx, db, &buildRecordB)).To(Succeed())
+
+			Expect(UpdateRecordImageDigest(ctx, records, appID, buildID2, "sha256:aaa")).To(Succeed())
+
+			r, err := records.Get(ctx, ByBuild(appID, buildID2))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(r.ImageDigest).To(Equal("sha256:aaa"))
+			Expect(r.Status).To(Equal(StatusSuccess))
+			Expect(r.Artifact).To(Equal(buildRecordB.Artifact))
+		})
+
+		It("should keep the image digest recorded first", func() {
+			Expect(CreateRecord(ctx, db, &buildRecordB)).To(Succeed())
+			Expect(UpdateRecordImageDigest(ctx, records, appID, buildID2, "sha256:first")).To(Succeed())
+
+			err := UpdateRecordImageDigest(ctx, records, appID, buildID2, "sha256:second")
+			Expect(err).To(MatchError(ErrRecordNotFound))
+			r, err := records.Get(ctx, ByBuild(appID, buildID2))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(r.ImageDigest).To(Equal("sha256:first"))
+		})
+
+		It("should return ErrRecordNotFound when updating digest of a missing record", func() {
+			err := UpdateRecordImageDigest(ctx, records, appID, "missing-build", "sha256:aaa")
+			Expect(err).To(MatchError(ErrRecordNotFound))
+		})
+
+		It("should match the latest succeeded record by both tag and digest", func() {
+			now := time.Now()
+			Expect(CreateRecord(ctx, db, newSucceeded("b-old", "v1", "sha256:aaa", now.Add(-time.Hour)))).To(Succeed())
+			Expect(CreateRecord(ctx, db, newSucceeded("b-new", "v1", "sha256:aaa", now))).To(Succeed())
+			// 同 digest 不同 tag（构建缓存全部命中）不能串到 v1 上
+			Expect(CreateRecord(ctx, db, newSucceeded("b-v2", "v2", "sha256:aaa", now.Add(time.Hour)))).To(Succeed())
+			failed := newSucceeded("b-failed", "v1", "sha256:aaa", now.Add(2*time.Hour))
+			failed.Status = StatusFailed
+			Expect(CreateRecord(ctx, db, failed)).To(Succeed())
+			otherApp := newSucceeded("b-other-app", "v1", "sha256:aaa", now.Add(3*time.Hour))
+			otherApp.AppID = appID + "-other"
+			Expect(CreateRecord(ctx, db, otherApp)).To(Succeed())
+
+			result, err := LatestSucceededRecordsByImages(ctx, records, appID, map[string]string{"v1": "sha256:aaa"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveLen(1))
+			Expect(result["v1"].BuildID).To(Equal("b-new"))
+		})
+
+		It("should not match when the tag was overwritten by another image", func() {
+			Expect(CreateRecord(ctx, db, newSucceeded("b-1", "v1", "sha256:aaa", time.Now()))).To(Succeed())
+
+			pushed := map[string]string{"v1": "sha256:pushed"}
+			result, err := LatestSucceededRecordsByImages(ctx, records, appID, pushed)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeEmpty())
+		})
+
+		It("should pair tag and digest within the same record", func() {
+			now := time.Now()
+			// tag 与 digest 各自落在当前页集合内，但不是同一对
+			Expect(CreateRecord(ctx, db, newSucceeded("b-cross", "v1", "sha256:bbb", now))).To(Succeed())
+			Expect(CreateRecord(ctx, db, newSucceeded("b-v2", "v2", "sha256:bbb", now.Add(-time.Hour)))).To(Succeed())
+
+			result, err := LatestSucceededRecordsByImages(
+				ctx, records, appID, map[string]string{"v1": "sha256:aaa", "v2": "sha256:bbb"},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveLen(1))
+			Expect(result["v2"].BuildID).To(Equal("b-v2"))
+		})
+
+		It("should skip images whose digest is not synced yet", func() {
+			Expect(CreateRecord(ctx, db, newSucceeded("b-1", "v1", "", time.Now()))).To(Succeed())
+
+			result, err := LatestSucceededRecordsByImages(ctx, records, appID, map[string]string{"v1": ""})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeEmpty())
 		})
 	})
 })
