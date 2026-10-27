@@ -1,3 +1,20 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License; you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
 /**
  * 场景级测试：应用列表页（路径清单见 docs/vitest/guides/TEST_SCENARIOS_ROUTES.md S14）
  *
@@ -9,6 +26,7 @@
  */
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/vue';
+import { createPinia } from 'pinia';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18nGlobalMocks, I18nTStub } from '../helpers/mock-i18n';
@@ -55,14 +73,17 @@ beforeEach(() => {
 
 async function renderPage() {
   const { default: Application } = await import('~/pages/application/application.vue');
-  return render(Application as never, {
-    props: { space: 'ws-1' } as never,
+  // useTableSettings 内部使用 ui store（pinia），需激活 pinia 实例；
+  // 空态/异常态文案由 <i18n-t> 插值组件渲染，直译为 keypath 供断言
+  const options = {
+    props: { space: 'ws-1' },
     global: {
       mocks: i18nGlobalMocks,
-      // 空态/异常态文案由 <i18n-t> 插值组件渲染，直译为 keypath 供断言
+      plugins: [createPinia()],
       components: { 'i18n-t': I18nTStub },
-    } as never,
-  });
+    },
+  };
+  return render(Application as never, options as never);
 }
 
 describe('应用列表：数据状态与导航', () => {

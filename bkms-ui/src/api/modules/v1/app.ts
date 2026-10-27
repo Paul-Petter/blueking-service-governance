@@ -117,6 +117,7 @@ export const AppService = {
    * @param body body UpdateAppModelSpecInput required 更新 Taf 配置请求
    * @response 200 EmptyOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 409 GinErrorOutput 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
    */
   updateAppTafSpec: async <Request extends UpdateAppTafSpecRequest = UpdateAppTafSpecRequest, ResponseData = EmptyOutput>(
     params?: NoInfer<Request>,
@@ -132,6 +133,7 @@ export const AppService = {
    * @param body body UpdateAppModelSpecInput required 更新 Trpc 配置请求
    * @response 200 EmptyOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 409 GinErrorOutput 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
    */
   updateAppTrpcSpec: async <Request extends UpdateAppTrpcSpecRequest = UpdateAppTrpcSpecRequest, ResponseData = EmptyOutput>(
     params?: NoInfer<Request>,
