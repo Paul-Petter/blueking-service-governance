@@ -16,24 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package mods
+package polaris
 
 import (
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod"
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-// BSCPWorkloadMetaProps 无参数。工作负载类型取决于实际渲染结果，由 BSCP 模块按渲染结果填写。
-type BSCPWorkloadMetaProps struct{}
-
-// Public 无对外内容。
-func (p BSCPWorkloadMetaProps) Public() any { return nil }
-
-// BSCPWorkloadMeta BSCP 元信息自动填充：初始化 BSCP 元信息时，自动填入工作负载名称与类型。
-// 目前仅 tRPC 支持，TAF 尚未接入。
-var BSCPWorkloadMeta = runtimemod.Spec[BSCPWorkloadMetaProps]{
-	ID: runtimemod.ModBSCPWorkloadMeta,
-	Resolve: runtimemod.ByFramework(map[string]BSCPWorkloadMetaProps{
-		appruntime.FrameworkTRPC: {},
-	}),
+func TestPolaris(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Polaris Capability Suite")
 }

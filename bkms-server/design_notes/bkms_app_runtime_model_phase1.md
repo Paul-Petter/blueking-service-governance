@@ -41,11 +41,12 @@ func ByLanguage[P Props](table map[string]P) func(string, string) Mod[P]
 简单能力一行即可：
 
 ```go
-var FrameworkFile = runtimemod.Spec[FrameworkFileProps]{
+// pkg/capability/frameworkfile
+var Spec = runtimemod.Spec[Props]{
     ID: runtimemod.ModFrameworkFile,
-    Resolve: runtimemod.ByFramework(map[string]FrameworkFileProps{
-        appruntime.FrameworkTRPC: {Format: FrameworkFileYAML},
-        appruntime.FrameworkTAF:  {Format: FrameworkFileTAF},
+    Resolve: runtimemod.ByFramework(map[string]Props{
+        appruntime.FrameworkTRPC: {Format: FormatYAML},
+        appruntime.FrameworkTAF:  {Format: FormatTAF},
     }),
 }
 ```
@@ -159,7 +160,6 @@ M1 交付：
 | golden JSON（5 组合 + Matrix） | 支持矩阵与对外契约不随重构漂移 |
 | `Set` 字段与 `Public()` 输出对齐（反射） | 新增能力漏进 `all()` 时立即失败 |
 | 工厂函数单测 | ByFramework / ByLanguage 的空语言、未知值语义 |
-| import 约束 | `mods` 只依赖 appruntime、runtimemod、core/app，不引入其他领域包 |
 
 M2 交付：执行器覆盖测试（各能力所在模块），保证凡 `Supported=true` 的组合都能构造执行器。
 
@@ -169,10 +169,11 @@ M2 交付：执行器覆盖测试（各能力所在模块），保证凡 `Suppor
 
 ```
 pkg/core/appruntime/runtimemod/        # 基础：ModID、ReasonCode、Mod、Spec、工厂、对外结构
-pkg/core/appruntime/runtimemod/mods/   # 具体能力声明、Set、Of(app)
+pkg/core/appruntime/runtimemod/mods/   # 组装：Set、Of(app)、Resolve、Matrix
+pkg/capability/<能力>/                 # 各能力声明及部分执行函数（M3 起）
 ```
 
-划分原则：基础包只放与具体能力无关的类型和工具；具体能力集中在 `mods`，每个能力一个文件。M3 再把各能力连同声明搬到 `pkg/capability/<能力>/`，届时 `Set` 的组装独立成一个薄包。
+划分原则：基础包只放与具体能力无关的类型和工具；能力声明一个能力一个包；`mods` 只负责组装。依赖方向由编译期循环检测保证，不另设 import 约束测试。详见 [M3 能力包划分](./bkms_app_runtime_model_phase2_pkg.md)。
 
 ---
 
@@ -180,9 +181,9 @@ pkg/core/appruntime/runtimemod/mods/   # 具体能力声明、Set、Of(app)
 
 | 步骤 | 内容 | 状态 |
 | --- | --- | --- |
-| M1 | 声明、`Set`、`Of(app)`、测试、文档 | 本次 |
-| M2 | 8 个能力的执行端改读 `Set` | 待做 |
-| M3 | 能力搬到 `pkg/capability/*` | 待做 |
+| M1 | 声明、`Set`、`Of(app)`、测试、文档 | ✅ #294 |
+| M2 | 8 个能力的执行端改读 `Set` | ✅ #302 |
+| M3 | 能力搬到 `pkg/capability/*` | 🚧 #307 |
 
 M2 的两个已知行为点：
 

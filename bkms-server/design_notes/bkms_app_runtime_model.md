@@ -238,11 +238,12 @@ AppSpec.DevMode 保留 Enabled 等用户配置；模块 props 为平台定义的
 | 包 | 职责 | 依赖约束 |
 | --- | --- | --- |
 | `pkg/core/appruntime/runtimemod` | ModID、ReasonCode、Mod、Spec、查表工厂、对外结构 | 只依赖 `appruntime` 与标准库 |
-| `pkg/core/appruntime/runtimemod/mods` | 各能力的声明、props 类型、公开投影、`Set` 与 `Of(app)` | 只依赖 `appruntime`、`runtimemod`、`core/app` |
+| `pkg/capability/<能力>` | 各能力的声明、props 类型、公开投影及执行函数，一个能力一个包 | 不依赖 `runtimemod/mods`；执行函数接收 `mods.Of(app).<能力>` |
+| `pkg/core/appruntime/runtimemod/mods` | 组装：`Set`、`Of(app)`、`Resolve`、`Matrix` | 依赖各能力包、`appruntime`、`runtimemod`、`core/app` |
 | 应用运行时组装 | `mods.Of(app)`：Application → 技术栈 → 能力集合 | 不放在 `core/app` 方法里，避免 core/app 反向依赖 |
 | `appmodelcore/trpc`、`taf`、blank 适配器 | 框架配置解码、校验、默认值、渲染/初始化差异 | 保留框架知识；通用业务通过 Mod/适配器接口调用 |
 
-不要求第一版把各领域包搬家。M3 再把各能力连同声明搬到 `pkg/capability/<能力>/`，届时 `Set` 的组装独立成薄包；禁止让 core/app 直接 import devmode/build/admincmd 来拼能力集合。
+M3 起能力声明位于 `pkg/capability/<能力>/`，执行代码逐步移入，未移入的见里程碑文档遗留项。禁止让 core/app 直接 import devmode/build/admincmd 来拼能力集合。
 
 ## 5. API 与产品契约
 
@@ -470,6 +471,6 @@ rg -n 'requiredForAppTypes|optionalForAppTypes|"trpc"|"taf"' pkg/core/env/cluste
 | blank 首期能力 | 仅目录声明；创建关闭 |
 | fileName/filePath 归属 | 收敛到框架 def 的 `Name` / `MountDir`（替代原“首期放 frameworkConfig”），见 §3.4 |
 
-阶段 2（能力层）的组织方式、能力目录与 pkg 划分已确定，见 [bkms_app_runtime_model_phase1.md](./bkms_app_runtime_model_phase1.md)；执行端切换见 [bkms_app_runtime_model_phase2.md](./bkms_app_runtime_model_phase2.md)。整体进度与 PR 拆分见 [bkms_app_runtime_model_milestones.md](./bkms_app_runtime_model_milestones.md)。
+阶段 2（能力层）的组织方式、能力目录与 pkg 划分已确定，见 [bkms_app_runtime_model_phase1.md](./bkms_app_runtime_model_phase1.md)；执行端切换见 [bkms_app_runtime_model_phase2.md](./bkms_app_runtime_model_phase2.md)；能力包划分见 [bkms_app_runtime_model_phase2_pkg.md](./bkms_app_runtime_model_phase2_pkg.md)。整体进度与 PR 拆分见 [bkms_app_runtime_model_milestones.md](./bkms_app_runtime_model_milestones.md)。
 
 首个实现变更建议只覆盖阶段 0–1 的一个垂直切片：定义技术栈目录、Application 新字段及旧 tRPC 数据规范化，配齐一致性测试。待统一模型稳定后再用 devmode/platformBuild 验证能力规范，避免在尚未验证的抽象上同时迁移全部领域功能。

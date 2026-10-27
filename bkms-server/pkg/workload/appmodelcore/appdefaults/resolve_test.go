@@ -10,12 +10,11 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/capability/devmode"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	componentdevmode "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -131,8 +130,8 @@ var _ = Describe("Application default resolution", func() {
 		spec := resolved.Environments[0]
 		Expect(spec.EnvName).To(Equal(development.Name))
 		Expect(*spec.DevMode.Enabled).To(BeTrue())
-		Expect(*spec.DevMode.WorkPath).To(Equal(componentdevmode.TafWorkPath))
-		Expect(*spec.DevMode.MountPath).To(Equal(componentdevmode.TafMountPath))
+		Expect(*spec.DevMode.WorkPath).To(Equal(devmode.TafWorkPath))
+		Expect(*spec.DevMode.MountPath).To(Equal(devmode.TafMountPath))
 
 		rules, err := ruleStore.List(ctx, appdefaults.ByWorkspace(workspace.ID))
 		Expect(err).NotTo(HaveOccurred())
@@ -193,19 +192,19 @@ func devModeRule(workspaceID, envType string, enabled bool) *appdefaults.Rule {
 }
 
 // trpcProps 返回 tRPC 技术栈的开发模式能力参数。
-func trpcProps() mods.DevModeProps {
-	return mods.DevModeProps{
-		ScriptSet: mods.DevModeScriptSetTRPC,
-		WorkPath:  componentdevmode.TrpcWorkPath,
-		MountPath: componentdevmode.TrpcMountPath,
+func trpcProps() devmode.Props {
+	return devmode.Props{
+		ScriptSet: devmode.ScriptSetTRPC,
+		WorkPath:  devmode.TrpcWorkPath,
+		MountPath: devmode.TrpcMountPath,
 	}
 }
 
 // tafProps 返回 TAF 技术栈的开发模式能力参数。
-func tafProps() mods.DevModeProps {
-	return mods.DevModeProps{
-		ScriptSet: mods.DevModeScriptSetTAF,
-		WorkPath:  componentdevmode.TafWorkPath,
-		MountPath: componentdevmode.TafMountPath,
+func tafProps() devmode.Props {
+	return devmode.Props{
+		ScriptSet: devmode.ScriptSetTAF,
+		WorkPath:  devmode.TafWorkPath,
+		MountPath: devmode.TafMountPath,
 	}
 }

@@ -16,24 +16,43 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package mods
+// Package frameworkfile 声明框架配置文件能力：哪些框架有框架配置文件，以及文件格式。
+package frameworkfile
 
 import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod"
 )
 
-// PolarisFrameworkPatchProps 无参数。
-type PolarisFrameworkPatchProps struct{}
+// Format 框架配置文件的格式，取值与配置文件存储的 appcfg.FileFormat 一致。
+type Format string
 
-// Public 无对外内容。
-func (p PolarisFrameworkPatchProps) Public() any { return nil }
+const (
+	// FormatYAML YAML 格式，tRPC 使用。
+	FormatYAML Format = "yaml"
+	// FormatTAF TAF conf 格式（标签加 key=value，不是标准 XML），TAF 使用。
+	FormatTAF Format = "taf"
+)
 
-// PolarisFrameworkPatch 北极星注册信息注入：渲染框架配置文件时，把北极星注册信息写入
-// plugins.registry.polaris.service，已有该配置时不覆盖。仅 tRPC 支持。
-var PolarisFrameworkPatch = runtimemod.Spec[PolarisFrameworkPatchProps]{
-	ID: runtimemod.ModPolarisFrameworkPatch,
-	Resolve: runtimemod.ByFramework(map[string]PolarisFrameworkPatchProps{
-		appruntime.FrameworkTRPC: {},
+// Props 框架配置文件的参数。
+type Props struct {
+	// Format 配置文件格式。
+	Format Format
+}
+
+// Public 对外展示文件格式，前端据此选择编辑器的语法（taf 按 xml 高亮）。
+func (p Props) Public() any {
+	return struct {
+		Format Format `json:"format"`
+	}{p.Format}
+}
+
+// Spec 框架配置文件：tRPC、TAF 支持；blank 没有框架配置文件。
+var Spec = runtimemod.Spec[Props]{
+	ID: runtimemod.ModFrameworkFile,
+	Resolve: runtimemod.ByFramework(map[string]Props{
+		appruntime.FrameworkTRPC: {Format: FormatYAML},
+
+		appruntime.FrameworkTAF: {Format: FormatTAF},
 	}),
 }

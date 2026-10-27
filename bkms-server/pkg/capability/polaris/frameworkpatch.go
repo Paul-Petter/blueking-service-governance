@@ -16,23 +16,24 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package mods
+package polaris
 
 import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod"
 )
 
-// PolarisServiceCheckProps 无参数。
-type PolarisServiceCheckProps struct{}
+// FrameworkPatchProps 无参数。
+type FrameworkPatchProps struct{}
 
 // Public 无对外内容。
-func (p PolarisServiceCheckProps) Public() any { return nil }
+func (p FrameworkPatchProps) Public() any { return nil }
 
-// PolarisServiceCheck 北极星服务名校验：北极星配置的服务名不在 tRPC 配置文件中时给出警告。仅 tRPC 支持。
-var PolarisServiceCheck = runtimemod.Spec[PolarisServiceCheckProps]{
-	ID: runtimemod.ModPolarisServiceCheck,
-	Resolve: runtimemod.ByFramework(map[string]PolarisServiceCheckProps{
+// FrameworkPatch 北极星注册信息注入：渲染框架配置文件时，把北极星注册信息写入
+// plugins.registry.polaris.service，已有该配置时不覆盖。仅 tRPC 支持。
+var FrameworkPatch = runtimemod.Spec[FrameworkPatchProps]{
+	ID: runtimemod.ModPolarisFrameworkPatch,
+	Resolve: runtimemod.ByFramework(map[string]FrameworkPatchProps{
 		appruntime.FrameworkTRPC: {},
 	}),
 }
