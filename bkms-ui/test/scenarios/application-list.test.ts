@@ -1,3 +1,20 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License; you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
 /**
  * 场景级测试：应用列表页（路径清单见 docs/vitest/guides/TEST_SCENARIOS_ROUTES.md S14）
  *
@@ -9,6 +26,7 @@
  */
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/vue';
+import { createPinia } from 'pinia';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { i18nGlobalMocks, I18nTStub } from '../helpers/mock-i18n';
@@ -44,6 +62,7 @@ const app = (name: string) => ({
   language: 'go',
   creator: 'tester',
   deployedEnvs: [],
+  lastOperator: 'op-user',
   createdAt: '2026-09-01T10:00:00Z',
   lastOperatedAt: '2026-09-01T10:00:00Z',
 });
@@ -55,20 +74,40 @@ beforeEach(() => {
 
 async function renderPage() {
   const { default: Application } = await import('~/pages/application/application.vue');
-  return render(Application as never, {
-    props: { space: 'ws-1' } as never,
+  // useTableSettings 内部使用 ui store（pinia），需激活 pinia 实例；
+  // 空态/异常态文案由 <i18n-t> 插值组件渲染，直译为 keypath 供断言
+  const options = {
+    props: { space: 'ws-1' },
     global: {
       mocks: i18nGlobalMocks,
-      // 空态/异常态文案由 <i18n-t> 插值组件渲染，直译为 keypath 供断言
+      plugins: [createPinia()],
       components: { 'i18n-t': I18nTStub },
-    } as never,
-  });
+    },
+  };
+  return render(Application as never, options as never);
 }
 
 describe('应用列表：数据状态与导航', () => {
   it('当应用列表加载完成时，应展示应用名称', async () => {
     await renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: 'app-a' })).toBeInTheDocument());
+  });
+
+  it('当无个性化记录时，应默认显示 6 个列头且创建者/创建时间列不默认展示', async () => {
+    // 挡住默认勾选基线回归：产品确认创建者列由操作信息列替代，默认隐藏
+    await renderPage();
+    await waitFor(() => expect(screen.getByTestId('table-header-name')).toBeInTheDocument());
+    for (const field of ['kind', 'language', 'deployedEnvs', 'lastOperator', 'lastOperatedAt']) {
+      expect(screen.getByTestId(`table-header-${field}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId('table-header-creator')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('table-header-createdAt')).not.toBeInTheDocument();
+  });
+
+  it('当新增列有值时，应展示最近操作人并为其余新增列空值兜底', async () => {
+    await renderPage();
+    await waitFor(() => expect(screen.getByText('op-user')).toBeInTheDocument());
+    expect(screen.getByText('tester')).toBeInTheDocument();
   });
 
   it('当应用列表为空时，应结束加载、渲染空态区块且不显示任何应用', async () => {

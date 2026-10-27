@@ -125,6 +125,8 @@
             isHover: true,
             isCurrent: true,
           }"
+          :settings="settings"
+          :show-settings="true"
           @cell-click="({ row }) => handleShowAppDetail(row)"
           @filter-change="handleFilterChange"
           @page-limit-change="
@@ -133,6 +135,7 @@
             }
           "
           @page-value-change="updateCurrent"
+          @setting-change="handleSettingChange"
         >
           <template #empty>
             <TableException
@@ -158,6 +161,7 @@
           <TableColumn
             field="kind"
             :filters="kindFilterOptions"
+            :label="$t('应用类型')"
             show-overflow="tooltip"
           >
             <template #header>
@@ -180,6 +184,7 @@
           <TableColumn
             field="language"
             :filters="languageFilterOptions"
+            :label="$t('语言')"
             show-overflow="tooltip"
           >
             <template #header>
@@ -197,6 +202,7 @@
           <TableColumn
             field="deployedEnvs"
             :filters="deployedEnvsFilterOptions"
+            :label="$t('已部署环境')"
             min-width="200"
           >
             <template #header>
@@ -248,12 +254,42 @@
             </template>
           </TableColumn>
           <TableColumn
+            field="lastOperator"
+            :label="$t('最近操作人')"
+            min-width="120"
+            show-overflow="tooltip"
+          >
+            <template #default="{ row }: { row: AppInfoOutputObj }">
+              {{ row?.lastOperator || '--' }}
+            </template>
+          </TableColumn>
+          <TableColumn
+            field="lastOperatedAt"
+            :label="$t('最近操作时间')"
+            min-width="160"
+            show-overflow="tooltip"
+          >
+            <template #default="{ row }: { row: AppInfoOutputObj }">
+              {{ row?.lastOperatedAt ? formatDateString(row.lastOperatedAt) : '--' }}
+            </template>
+          </TableColumn>
+          <TableColumn
             field="creator"
             :label="$t('创建者')"
             show-overflow="tooltip"
           >
             <template #default="{ row }: { row: AppInfoOutputObj }">
               {{ row?.creator || '--' }}
+            </template>
+          </TableColumn>
+          <TableColumn
+            field="createdAt"
+            :label="$t('创建时间')"
+            min-width="160"
+            show-overflow="tooltip"
+          >
+            <template #default="{ row }: { row: AppInfoOutputObj }">
+              {{ row?.createdAt ? formatDateString(row.createdAt) : '--' }}
             </template>
           </TableColumn>
           <TableColumn
@@ -311,6 +347,8 @@
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
+  import { useTableSettings } from '~/composables/use-table-settings';
+  import useTime from '~/composables/use-time';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
 
@@ -336,6 +374,13 @@
   const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
   const { getDeployStatusInfo } = useDeployStatusMap();
+  const { formatDateString } = useTime();
+
+  // 列设置：应用名称列不可隐藏，操作列无 field 天然不进面板
+  const { settings, handleSettingChange } = useTableSettings('application-list', {
+    defaultChecked: ['name', 'kind', 'language', 'deployedEnvs', 'lastOperator', 'lastOperatedAt'],
+    disabled: ['name'],
+  });
 
   const isLoading = ref(false);
   const appList = ref<AppInfoOutputObj[]>([]);

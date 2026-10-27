@@ -60,7 +60,8 @@ const { settings, handleSettingChange } = useTableSettings(tableId, {
 
 | 页面 | tableId | 默认勾选 | 不可隐藏 |
 |------|---------|----------|----------|
+| `application.vue` | `'application-list'`（固定） | 应用名称、应用类型、语言、已部署环境、最近操作人、最近操作时间 6 列 | 应用名称列 |
 | `deploy-overview.vue` | `'deploy-overview'`（固定） | 环境、类型、状态等 6 列 | 环境列 |
-| `instance-table.vue` | `instance-table-${环境名}`（随环境变） | id、镜像、IP 等 9 列 | id 列 |
+| `instance-table.vue` | `'instance-table-v2'`（固定） | id、镜像、IP 等 7 列 | id 列 |
 
-`instance-table` 页面每个环境渲染一张表格，所以 tableId 里拼了环境名——在环境 A 调列设置，不会影响环境 B。
+`application-list` 是应用列表页唯一一张表，tableId 固定。`instance-table` 曾按环境名拼 tableId，列合并后换用固定新 id `'instance-table-v2'`——所有环境共用一份列设置。

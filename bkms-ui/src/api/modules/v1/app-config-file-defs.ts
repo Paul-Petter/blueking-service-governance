@@ -19,6 +19,7 @@ export const AppConfigFileDefsService = {
    * @param body body CreateDefInput required 创建配置文件定义请求
    * @response 200 CreateDefOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 409 GinErrorOutput 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
    */
   createAppConfigFileDef: async <Request extends CreateAppConfigFileDefRequest = CreateAppConfigFileDefRequest, ResponseData = CreateDefOutput>(
     params?: NoInfer<Request>,
@@ -65,6 +66,7 @@ export const AppConfigFileDefsService = {
    * @param body body UpdateDefInput required 更新配置文件定义请求
    * @response 200 UpdateDefOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 409 GinErrorOutput 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
    */
   updateAppConfigFileDef: async <Request extends UpdateAppConfigFileDefRequest = UpdateAppConfigFileDefRequest, ResponseData = UpdateDefOutput>(
     params?: NoInfer<Request>,
@@ -144,6 +146,7 @@ export const AppConfigFileDefsService = {
    * @param body body UpdateHelmFileInput required Helm 编辑保存请求
    * @response 200 UpdateHelmFileOutput OK
    * @response 400 GinErrorOutput Bad Request
+   * @response 409 GinErrorOutput 文件名和挂载目录已存在，details.code=APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT
    */
   updateHelmFile: async <Request extends UpdateHelmFileRequest = UpdateHelmFileRequest, ResponseData = UpdateHelmFileOutput>(
     params?: NoInfer<Request>,
