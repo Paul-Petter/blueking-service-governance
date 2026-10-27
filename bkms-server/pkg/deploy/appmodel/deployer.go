@@ -40,6 +40,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
@@ -741,12 +742,23 @@ func (d *Deployer) createDeployRecord(
 	operator := auth.MustGetUser(ctx).ID
 	releaseMode := ReleaseModeAll
 	var strategySnapshot *ReleaseStrategySnapshot
+	var progress *BatchProgress
 	if strategy != nil {
-		releaseMode = ReleaseModeBatch
+		releaseMode = ReleaseModeCanary
 		strategySnapshot = &ReleaseStrategySnapshot{
 			ID:      strategy.ID.Hex(),
 			Name:    strategy.Name,
 			Batches: strategy.Batches,
+		}
+		oldImageTag, err := d.getRunningImageTag(ctx, env.Name, trafficLaneName)
+		if err != nil {
+			return "", err
+		}
+		progress = &BatchProgress{
+			BatchPhase:  batchrelease.BatchPhasePending,
+			Replicas:    replicas,
+			OldImageTag: oldImageTag,
+			NewImageTag: imageTag,
 		}
 	}
 	record := Record{
@@ -765,6 +777,7 @@ func (d *Deployer) createDeployRecord(
 		ResourceKeys:    resourceKeys,
 		ReleaseMode:     releaseMode,
 		ReleaseStrategy: strategySnapshot,
+		BatchProgress:   progress,
 		Message:         "",
 		Status:          StatusDeploying,
 		Extras:          NewBuildAutoDeployExtras(buildAutoDeployInfo),
@@ -779,6 +792,18 @@ func (d *Deployer) createDeployRecord(
 		return "", errors.Wrapf(err, "create deploy record")
 	}
 	return record.ID.Hex(), nil
+}
+
+// getRunningImageTag 返回环境 / 泳道中旧版本实例正在使用的镜像标签
+func (d *Deployer) getRunningImageTag(ctx context.Context, envName, trafficLaneName string) (string, error) {
+	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName, StatusDeployed)
+	if errors.Is(err, ErrDeployRecordNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", errors.Wrap(err, "get latest deployed record")
+	}
+	return record.ImageTag, nil
 }
 
 // createInstancesUpdateRecord 为全量实例更新创建部署记录
