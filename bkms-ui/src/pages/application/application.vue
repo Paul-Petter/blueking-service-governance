@@ -256,6 +256,7 @@
           <TableColumn
             field="lastOperator"
             :label="$t('最近操作人')"
+            min-width="120"
             show-overflow="tooltip"
           >
             <template #default="{ row }: { row: AppInfoOutputObj }">
@@ -265,6 +266,7 @@
           <TableColumn
             field="lastOperatedAt"
             :label="$t('最近操作时间')"
+            min-width="160"
             show-overflow="tooltip"
           >
             <template #default="{ row }: { row: AppInfoOutputObj }">
@@ -283,6 +285,7 @@
           <TableColumn
             field="createdAt"
             :label="$t('创建时间')"
+            min-width="160"
             show-overflow="tooltip"
           >
             <template #default="{ row }: { row: AppInfoOutputObj }">

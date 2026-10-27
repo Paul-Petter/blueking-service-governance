@@ -29,7 +29,11 @@
  *   vi.mock('@blueking/table', tableMockFactory);
  */
 
-import { Comment, defineComponent, h } from 'vue';
+import { TableColumnStub } from './table-column-stub';
+import { TableStub } from './table-stub';
+
+export { TableColumnStub } from './table-column-stub';
+export { TableStub } from './table-stub';
 
 /**
  * 安装 vxe 依赖的 jsdom 垫片（在测试文件 beforeAll 中调用一次）。
@@ -48,80 +52,34 @@ export function installVxeShims() {
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', size(600));
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', size(1200));
   // useElementHeight 通过 getBoundingClientRect 测高
-  Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
-    return {
-      width: 1200,
-      height: 600,
-      top: 0,
-      left: 0,
-      bottom: 600,
-      right: 1200,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect;
+  const fakeRect: DOMRect = {
+    width: 1200,
+    height: 600,
+    top: 0,
+    left: 0,
+    bottom: 600,
+    right: 1200,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
   };
-  globalThis.ResizeObserver = class {
+  Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    return fakeRect;
+  };
+  const mockResizeObserver = class {
     cb: ResizeObserverCallback;
     constructor(cb: ResizeObserverCallback) {
       this.cb = cb;
     }
     disconnect() {}
     observe(target: Element) {
-      this.cb([{ target } as ResizeObserverEntry], this as never);
+      const entry = { target };
+      this.cb([entry as ResizeObserverEntry], this as never);
     }
     unobserve() {}
-  } as never;
+  };
+  globalThis.ResizeObserver = mockResizeObserver as unknown as typeof ResizeObserver;
 }
-
-/** TableColumn stub：透传列插槽（供 TableStub 按行渲染），无插槽时输出注释节点占位 */
-export const TableColumnStub = defineComponent({
-  name: 'TableColumnStub',
-  props: {
-    field: { type: String, default: '' },
-    label: { type: String, default: '' },
-    type: { type: String, default: '' },
-  },
-  setup(_props, { slots }) {
-    return () => (slots.default ? h('span', slots.default({ row: {}, rowIndex: 0 })) : h(Comment, ''));
-  },
-});
-
-/**
- * Table stub：按 data 渲染行并逐列求值插槽；data 为空时渲染 #empty 插槽（空态可断言）。
- * 行标记 data-testid="table-row"，空态区块标记 data-testid="table-empty"。
- */
-export const TableStub = defineComponent({
-  name: 'TableStub',
-  props: { data: { type: Array, default: () => [] } },
-  setup(props, { slots, expose }) {
-    // 契约：页面可能经 ref 调用 getVxeTableInstance().scrollTo()（如 env.vue:545 恢复滚动位置）
-    expose({ getVxeTableInstance: () => ({ scrollTo: () => Promise.resolve() }) });
-    return () => {
-      const columns = (slots.default?.() ?? []).filter(Boolean);
-      const rows = props.data as Record<string, unknown>[];
-      const body = rows.length
-        ? rows.map((row, rowIndex) =>
-            h(
-              'div',
-              { key: rowIndex, 'data-testid': 'table-row' },
-              columns.map(
-                (col: { children?: { default?: (s: unknown) => unknown }; props?: { field?: string } }, i: number) =>
-                  h('span', { key: i }, [
-                    col.children?.default
-                      ? col.children.default({ row, rowIndex })
-                      : String(row?.[col.props?.field ?? ''] ?? '--'),
-                  ]),
-              ),
-            ),
-          )
-        : slots.empty
-          ? h('div', { 'data-testid': 'table-empty' }, [slots.empty()])
-          : null;
-      return h('div', { 'data-testid': 'table-stub' }, [body]);
-    };
-  },
-});
 
 /** vi.mock('@blueking/table') 的标准 factory：替换为轻量表格 stub */
 export const tableMockFactory = () => ({

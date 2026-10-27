@@ -62,6 +62,7 @@ const app = (name: string) => ({
   language: 'go',
   creator: 'tester',
   deployedEnvs: [],
+  lastOperator: 'op-user',
   createdAt: '2026-09-01T10:00:00Z',
   lastOperatedAt: '2026-09-01T10:00:00Z',
 });
@@ -90,6 +91,23 @@ describe('应用列表：数据状态与导航', () => {
   it('当应用列表加载完成时，应展示应用名称', async () => {
     await renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: 'app-a' })).toBeInTheDocument());
+  });
+
+  it('当无个性化记录时，应默认显示 6 个列头且创建者/创建时间列不默认展示', async () => {
+    // 挡住默认勾选基线回归：产品确认创建者列由操作信息列替代，默认隐藏
+    await renderPage();
+    await waitFor(() => expect(screen.getByTestId('table-header-name')).toBeInTheDocument());
+    for (const field of ['kind', 'language', 'deployedEnvs', 'lastOperator', 'lastOperatedAt']) {
+      expect(screen.getByTestId(`table-header-${field}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId('table-header-creator')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('table-header-createdAt')).not.toBeInTheDocument();
+  });
+
+  it('当新增列有值时，应展示最近操作人并为其余新增列空值兜底', async () => {
+    await renderPage();
+    await waitFor(() => expect(screen.getByText('op-user')).toBeInTheDocument());
+    expect(screen.getByText('tester')).toBeInTheDocument();
   });
 
   it('当应用列表为空时，应结束加载、渲染空态区块且不显示任何应用', async () => {

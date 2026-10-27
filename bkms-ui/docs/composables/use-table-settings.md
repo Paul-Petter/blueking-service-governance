@@ -60,7 +60,7 @@ const { settings, handleSettingChange } = useTableSettings(tableId, {
 
 | 页面 | tableId | 默认勾选 | 不可隐藏 |
 |------|---------|----------|----------|
-| `application.vue` | `'application-list'`（固定） | 应用名称、应用类型、语言、已部署环境、创建者 5 列 | 应用名称列 |
+| `application.vue` | `'application-list'`（固定） | 应用名称、应用类型、语言、已部署环境、最近操作人、最近操作时间 6 列 | 应用名称列 |
 | `deploy-overview.vue` | `'deploy-overview'`（固定） | 环境、类型、状态等 6 列 | 环境列 |
 | `instance-table.vue` | `'instance-table-v2'`（固定） | id、镜像、IP 等 7 列 | id 列 |
 
