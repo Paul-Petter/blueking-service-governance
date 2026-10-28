@@ -45,10 +45,10 @@ const (
 )
 
 const (
-	defaultGoBuildCommandTemplate  = "CGO_ENABLED=0 go build -trimpath -o /out/%s ."
+	defaultGoBuildCommandTemplate  = "CGO_ENABLED=0 go build -trimpath -o %s/%s ."
 	defaultCppBuildCommandTemplate = "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release" +
 		" && cmake --build build --target %s -j$(nproc)" +
-		" && cp build/%s /out/%s"
+		" && cp build/%s %s/%s"
 )
 
 var safeAppNameRegexp = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
@@ -62,18 +62,23 @@ var templateFiles fs.FS = embeddedTemplates
 var languageSpecs = map[string]languageSpec{
 	LanguageGo: {
 		templatePath:        goTemplatePath,
+		defaultArtifactDir:  defaultArtifactDir,
 		defaultBuildCommand: defaultGoBuildCommand,
 		prepareTemplateData: prepareGoTemplateData,
 	},
 	LanguageCpp: {
 		templatePath:        cppTemplatePath,
+		defaultArtifactDir:  defaultArtifactDir,
 		defaultBuildCommand: defaultCppBuildCommand,
 	},
 }
 
 type languageSpec struct {
-	templatePath        string
-	defaultBuildCommand func(appName string) string
+	templatePath string
+	// defaultArtifactDir 未配置产物目录时使用的默认值，按语言区分
+	defaultArtifactDir string
+	// defaultBuildCommand 未指定 BuildCommands 时，按应用名和生效的产物目录构造默认构建命令
+	defaultBuildCommand func(appName string, artifactDir string) string
 	// prepareTemplateData 用于在通用字段填充完成后，追加语言特定的模板数据
 	//
 	// 目前只有 Go 需要基于源码目录探测 go.sum 是否存在；C++ 分支暂时没有类似需求，
@@ -82,6 +87,8 @@ type languageSpec struct {
 }
 
 // Input 保存 Dockerfile 模板渲染所需的结构化输入
+//
+// ArtifactDir 是构建产物目录的原始值，为空时使用语言默认值，非空时渲染前统一校验与规范化
 type Input struct {
 	Language            string
 	BuilderImage        string
@@ -91,6 +98,7 @@ type Input struct {
 	RuntimeEnvCommands  string
 	StartCommand        string
 	ExtraFiles          string
+	ArtifactDir         string
 	DockerBuildArgNames string
 	DockerBuildDir      string
 	ImageName           string
@@ -112,7 +120,13 @@ type templateData struct {
 	StartCommand        string
 	ExtraFileCopies     []ExtraFileCopy
 	AppName             string
+	ArtifactDir         string
 	DependencyFiles     []string
+	// UseDefaultAppEntrypoint 为 true 时，未配置启动命令也写 ENTRYPOINT ["/app/<AppName>"]
+	//
+	// 只有语言默认构建命令能保证产物文件名是 AppName，整目录拷贝后路径是 /app/<AppName>
+	// 自定义构建命令可能产出别的文件名，这时不能写默认入口，否则容器会去执行一个不存在的文件
+	UseDefaultAppEntrypoint bool
 }
 
 // Render 使用与语言类型匹配的模板渲染 BKMS 默认应用 Dockerfile
@@ -171,13 +185,23 @@ func appNameFromImageName(imageName string) (string, error) {
 }
 
 func buildTemplateData(input Input, spec languageSpec, appName string) (*templateData, error) {
+	// 产物目录要先确定：默认构建命令的输出路径依赖它
+	artifactDir, err := resolveArtifactDir(input.ArtifactDir, spec.defaultArtifactDir)
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve artifact dir")
+	}
+
 	buildCommands, err := parseCommands("build commands", input.BuildCommands)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse build commands")
 	}
-	if len(buildCommands) == 0 {
-		buildCommands = []string{spec.defaultBuildCommand(appName)}
+
+	// 空命令才会换成默认构建命令；先记下这个事实，后面才能判断 /app/<appName> 是否一定存在
+	useDefaultBuildCommand := len(buildCommands) == 0
+	if useDefaultBuildCommand {
+		buildCommands = []string{spec.defaultBuildCommand(appName, artifactDir)}
 	}
+
 	preBuildCommands, err := parseCommands("pre-build commands", input.PreBuildCommands)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse pre-build commands")
@@ -195,15 +219,17 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 		return nil, errors.Wrap(err, "parse extra files")
 	}
 	data := &templateData{
-		BuilderImage:        input.BuilderImage,
-		RunnerImage:         input.RunnerImage,
-		DockerBuildArgNames: dockerBuildArgs,
-		PreBuildCommands:    preBuildCommands,
-		BuildCommands:       buildCommands,
-		RuntimeEnvCommands:  runtimeEnvCommands,
-		StartCommand:        strings.TrimSpace(input.StartCommand),
-		ExtraFileCopies:     extraFileCopies,
-		AppName:             appName,
+		BuilderImage:            input.BuilderImage,
+		RunnerImage:             input.RunnerImage,
+		DockerBuildArgNames:     dockerBuildArgs,
+		PreBuildCommands:        preBuildCommands,
+		BuildCommands:           buildCommands,
+		RuntimeEnvCommands:      runtimeEnvCommands,
+		StartCommand:            strings.TrimSpace(input.StartCommand),
+		ExtraFileCopies:         extraFileCopies,
+		AppName:                 appName,
+		ArtifactDir:             artifactDir,
+		UseDefaultAppEntrypoint: useDefaultBuildCommand,
 	}
 	if spec.prepareTemplateData != nil {
 		if err = spec.prepareTemplateData(input, data); err != nil {
@@ -216,17 +242,18 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 // defaultGoBuildCommand 构造未指定 BuildCommands 时使用的默认 go build 命令
 //
 // 这里的 appName 来自 ImageName 的安全转换结果：BKMS 平台约定应用名与镜像名、构建产物文件名保持一致，
-// 因此可以直接用它作为 `-o /out/<appName>` 的产物路径
-func defaultGoBuildCommand(appName string) string {
-	return fmt.Sprintf(defaultGoBuildCommandTemplate, appName)
+// 因此可以直接用它作为 `-o <artifactDir>/<appName>` 的产物路径；未配置产物目录时即 `/out/<appName>`。
+// 整目录拷贝后二进制在 `/app/<appName>`，未配置启动命令时模板会写回 ENTRYPOINT ["/app/<appName>"]
+func defaultGoBuildCommand(appName string, artifactDir string) string {
+	return fmt.Sprintf(defaultGoBuildCommandTemplate, artifactDir, appName)
 }
 
 // defaultCppBuildCommand 构造未指定 BuildCommands 时使用的默认 C++ 构建命令
 //
-// 默认约定 CMake target、构建产物文件名与应用名保持一致，构建完成后统一复制到 `/out/<appName>`，
-// 这样后续产物校验与 runner 阶段可以复用跨语言的固定路径规则
-func defaultCppBuildCommand(appName string) string {
-	return fmt.Sprintf(defaultCppBuildCommandTemplate, appName, appName, appName)
+// 默认约定 CMake target、构建产物文件名与应用名保持一致，构建完成后统一复制到 `<artifactDir>/<appName>`，
+// 整目录拷贝后二进制在 `/app/<appName>`，未配置启动命令时与 Go 共用默认 ENTRYPOINT
+func defaultCppBuildCommand(appName string, artifactDir string) string {
+	return fmt.Sprintf(defaultCppBuildCommandTemplate, appName, appName, artifactDir, appName)
 }
 
 // parseDockerBuildArgNames 解析 BKMS_DOCKER_BUILD_ARG_NAMES 传入的 JSON 字符串数组

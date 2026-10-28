@@ -8,7 +8,9 @@ ARG {{ . }}
 
 WORKDIR /workspace
 
-RUN mkdir -p /out
+# BKMS_ARTIFACT_DIR is only visible in the builder stage, build commands should write artifacts into it.
+ENV BKMS_ARTIFACT_DIR={{ .ArtifactDir }}
+RUN mkdir -p {{ .ArtifactDir }}
 
 COPY . .
 
@@ -20,14 +22,14 @@ RUN {{ . }}
 RUN {{ . }}
 {{ end -}}
 
-RUN test -f /out/{{ .AppName }} || (echo "build artifact /out/{{ .AppName }} not found" && exit 1)
+RUN test -n "$(ls -A {{ .ArtifactDir }} 2>/dev/null)" || (echo "build output directory {{ .ArtifactDir }} is missing or empty" && exit 1)
 
 # -------------- runner container --------------
 FROM {{ .RunnerImage }} AS runner
 
 WORKDIR /app
 
-COPY --from=builder /out/{{ .AppName }} /app/{{ .AppName }}
+COPY --from=builder {{ .ArtifactDir }}/ /app/
 
 {{ range .ExtraFileCopies -}}
 COPY {{ .Source }} {{ .Dest }}
@@ -39,6 +41,6 @@ RUN {{ . }}
 
 {{ if .StartCommand -}}
 ENTRYPOINT ["/bin/sh", "-ec", {{ quoteStartCommand .StartCommand }}]
-{{ else -}}
+{{ else if .UseDefaultAppEntrypoint -}}
 ENTRYPOINT ["/app/{{ .AppName }}"]
 {{ end -}}

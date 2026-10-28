@@ -61,6 +61,7 @@ var _ = Describe("Build config serializers", func() {
 				PlatformBuildConfig: &imagebuild.PlatformBuildConfig{
 					BuilderImage: "golang:1.24",
 					RunnerImage:  "debian:12",
+					ArtifactDir:  "/dist",
 					Commands: &imagebuild.BuildCommands{
 						PreBuild: []string{"go mod download"},
 						Start:    "./app",
@@ -74,6 +75,7 @@ var _ = Describe("Build config serializers", func() {
 		Expect(output.CodeRepo.PlatformBuildConfig).To(Equal(&serializer.PlatformBuildConfigOutputObj{
 			BuilderImage: "golang:1.24",
 			RunnerImage:  "debian:12",
+			ArtifactDir:  "/dist",
 			Commands: &serializer.BuildCommandsOutputObj{
 				PreBuild:   []string{"go mod download"},
 				Build:      []string{},
@@ -134,12 +136,24 @@ var _ = Describe("Build config serializers", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("accepts empty start command", func() {
+		It("accepts empty start command when build commands are empty", func() {
 			err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
+				input.PlatformBuildConfig.Commands.Build = nil
 				input.PlatformBuildConfig.Commands.Start = ""
 			}).ValidatePlatformBuildConfig()
 
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects empty start command when build commands are set", func() {
+			err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
+				input.PlatformBuildConfig.Commands.Start = ""
+			}).ValidatePlatformBuildConfig()
+
+			Expect(err).To(MatchError(
+				"buildConfig.repoBuildConfig.platformBuildConfig.commands.start " +
+					"is required when build commands are set",
+			))
 		})
 
 		It("rejects command lists exceeding the max count", func() {
@@ -165,6 +179,59 @@ var _ = Describe("Build config serializers", func() {
 				"buildConfig.repoBuildConfig.platformBuildConfig.commands.start must not be blank",
 			))
 		})
+
+		DescribeTable("stores normalized artifact dir",
+			func(artifactDir, expected string) {
+				cfg, err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
+					input.PlatformBuildConfig.ArtifactDir = artifactDir
+				}).ToModel()
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.PlatformBuildConfig.ArtifactDir).To(Equal(expected))
+			},
+			// 空串表示未配置，构建时由生成器按语言默认值 /out 生效
+			Entry("empty keeps unset", "", ""),
+			Entry("plain path", "/out/bin", "/out/bin"),
+			Entry("trailing slash", "/out/bin/", "/out/bin"),
+			Entry("duplicated slashes", "/out//bin", "/out/bin"),
+			Entry("dot segment", "/out/./bin", "/out/bin"),
+			Entry("dots inside segment", "/out/a..b", "/out/a..b"),
+			Entry(
+				"max length",
+				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildArtifactDirLen-1),
+				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildArtifactDirLen-1),
+			),
+		)
+
+		DescribeTable(
+			"rejects invalid artifact dir",
+			func(artifactDir, rule string) {
+				cfg, err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
+					input.PlatformBuildConfig.ArtifactDir = artifactDir
+				}).ToModel()
+
+				Expect(cfg).To(BeNil())
+				Expect(err).To(MatchError(ContainSubstring(
+					"buildConfig.repoBuildConfig.platformBuildConfig.artifactDir",
+				)))
+				Expect(err).To(MatchError(ContainSubstring(rule)))
+			},
+			Entry("relative path", "out", "must be an absolute path"),
+			Entry("root", "/", "must not be the root directory"),
+			Entry("root after clean", "/./", "must not be the root directory"),
+			Entry("parent segment", "/out/../etc", "must not contain '..' path segment"),
+			Entry("space", "/out/my dir", "only letters, digits, dot, underscore, hyphen and slash are allowed"),
+			Entry(
+				"shell metacharacter",
+				"/out;rm -rf /",
+				"only letters, digits, dot, underscore, hyphen and slash are allowed",
+			),
+			Entry(
+				"too long",
+				"/"+strings.Repeat("a", imagebuild.MaxPlatformBuildArtifactDirLen),
+				"length must not exceed 128",
+			),
+		)
 	})
 
 	Describe("Platform build extra files validation", func() {

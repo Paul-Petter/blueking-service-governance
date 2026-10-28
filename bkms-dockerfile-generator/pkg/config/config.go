@@ -38,6 +38,7 @@ const (
 	EnvDockerfileRuntimeEnvCommand = "BKMS_DOCKERFILE_RUNTIME_ENV_COMMANDS"
 	EnvDockerfileStartCommand      = "BKMS_DOCKERFILE_START_COMMAND"
 	EnvDockerfileExtraFiles        = "BKMS_DOCKERFILE_EXTRA_FILES"
+	EnvDockerfileArtifactDir       = "BKMS_DOCKERFILE_ARTIFACT_DIR"
 	EnvDockerBuildArgNames         = "BKMS_DOCKER_BUILD_ARG_NAMES"
 	EnvImageName                   = "BKMS_IMAGE_NAME"
 
@@ -60,11 +61,15 @@ type Config struct {
 	RuntimeEnvCommands  string
 	StartCommand        string
 	ExtraFiles          string
+	ArtifactDir         string
 	DockerBuildArgNames string
 	ImageName           string
 }
 
 // LoadFromEnviron 从 os.Environ 格式的数据中读取并校验 Dockerfile 生成配置
+//
+// ArtifactDir 刻意不裁剪空白：含空白的产物目录应在渲染前被字符白名单拒绝，而不是被静默修正；
+// 旧版流水线模板不传该变量时读取为空串，渲染时回落到语言默认值
 func LoadFromEnviron(environ []string) (Config, error) {
 	envs := parseEnviron(environ)
 	cfg := Config{
@@ -79,6 +84,7 @@ func LoadFromEnviron(environ []string) (Config, error) {
 		RuntimeEnvCommands:  envs[EnvDockerfileRuntimeEnvCommand],
 		StartCommand:        strings.TrimSpace(envs[EnvDockerfileStartCommand]),
 		ExtraFiles:          envs[EnvDockerfileExtraFiles],
+		ArtifactDir:         envs[EnvDockerfileArtifactDir],
 		DockerBuildArgNames: envs[EnvDockerBuildArgNames],
 		ImageName:           strings.TrimSpace(envs[EnvImageName]),
 	}
