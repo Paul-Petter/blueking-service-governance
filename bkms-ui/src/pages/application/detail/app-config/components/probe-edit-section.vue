@@ -93,13 +93,16 @@
             <Radio.Button label="shell">shell</Radio.Button>
             <Radio.Button label="exec">exec</Radio.Button>
           </Radio.Group>
+          <CommandModeHint :mode="execMode" />
           <!-- shell 模式：textarea 输入 shCommand -->
-          <Input
-            v-if="execMode === 'shell'"
-            v-model="probeData.probeHandler!.shCommand"
-            :rows="4"
-            type="textarea"
-          />
+          <template v-if="execMode === 'shell'">
+            <Input
+              v-model="probeData.probeHandler!.shCommand"
+              :placeholder="$t('请输入')"
+              :rows="4"
+              type="textarea"
+            />
+          </template>
           <!-- exec 模式：RepeatableInput 输入 command -->
           <RepeatableInput
             v-else
@@ -276,6 +279,7 @@
   import { Button, Divider, Form, Input, PopConfirm, Radio, Select } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { ProbeOutput } from '~/@types/v1/app-spec';
+  import CommandModeHint from '~/components/command-mode-hint.vue';
   import RepeatableInput from '~/components/repeatable-input.vue';
 
   import { ProbeType } from './types';

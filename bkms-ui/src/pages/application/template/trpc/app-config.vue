@@ -20,33 +20,27 @@
   <div class="flex flex-col p-[20px] !max-w-[1400px] w-full">
     <ToggleCard
       class="bg-[#fff] shadow-sm px-[16px]"
+      content-class="overflow-x-auto"
       :name="$t('应用配置')"
     >
       <Form
         ref="formRef"
-        class="px-[245px]"
+        class="mx-auto w-[calc(100%-490px)] min-w-[640px]"
         :label-width="135"
         :model="formData"
       >
         <Form.FormItem :label="$t('启动命令')">
-          <RepeatableInput
-            ref="commandRef"
-            v-model="formData.command"
-            :add-text="$t('添加启动命令')"
-            :required="formData.command.length > 0"
-            trim-on-input
+          <StartupCommandInput
+            ref="startupCommandRef"
+            default-mode="shell"
+            exec-background
+            :value="formData"
           />
         </Form.FormItem>
-        <Form.FormItem :label="$t('命令参数')">
-          <RepeatableInput
-            ref="argsRef"
-            v-model="formData.args"
-            :add-text="$t('添加命令参数')"
-            :required="formData.args.length > 0"
-            trim-on-input
-          />
-        </Form.FormItem>
-        <Form.FormItem :label="$t('环境变量')">
+        <Form.FormItem
+          class="!mb-0"
+          :label="$t('环境变量')"
+        >
           <KeyValue
             v-model="formData.env"
             :key-placeholder="$t('请输入变量名')"
@@ -130,17 +124,17 @@
 
   import builderTemplate from './trpc-go-template.yaml?raw';
 
-  defineProps({
-    editorTitle: {
-      type: String,
-    },
-  });
+  const props = defineProps<{
+    editorTitle?: string;
+    value: { appModelSpec: AppModelSpecInput };
+  }>();
 
   import KeyValue from '~/components/key-value.vue';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
-  import RepeatableInput from '~/components/repeatable-input.vue';
+  import StartupCommandInput from '~/components/startup-command-input.vue';
   import useEnvManager from '~/composables/use-env-manager';
 
+  import type { AppModelSpecInput } from '~/@types/v1/app';
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
 
   const { envList, handleGetEnvList } = useEnvManager();
@@ -149,14 +143,15 @@
     args: string[];
     command: string[];
     env: Record<string, string>[];
+    shCommand: string;
   }>({
-    command: [],
-    args: [],
+    command: props.value.appModelSpec.command || [],
+    args: props.value.appModelSpec.args || [],
     env: [],
+    shCommand: props.value.appModelSpec.shCommand || '',
   });
 
-  const commandRef = ref<InstanceType<typeof RepeatableInput> | null>(null);
-  const argsRef = ref<InstanceType<typeof RepeatableInput> | null>(null);
+  const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
   const msEditorRef = ref<InstanceType<typeof MsEditor> | null>(null);
   // yaml异常
   const editorErr = ref<{
@@ -170,9 +165,8 @@
   function getValue() {
     formData.value.env = formData.value.env.map(item => ({ key: item.key, value: item.value }));
     return {
-      command: formData.value.command,
-      args: formData.value.args,
-      env: formData.value.env,
+      ...formData.value,
+      ...startupCommandRef.value?.getValue(),
       content: msEditorRef.value?.getValue() || '',
     };
   }
@@ -199,8 +193,8 @@
     hideOrShowError();
   }
   async function validate() {
-    const [commandValid, argsValid] = await Promise.all([commandRef.value?.validate(), argsRef.value?.validate()]);
-    if (!commandValid || !argsValid || editorErr.value?.message?.length) return false;
+    const commandValid = await startupCommandRef.value?.validate();
+    if (!commandValid || editorErr.value?.message?.length) return false;
     return true;
   }
 
@@ -256,6 +250,7 @@
   .yaml-sideslider-layout > :deep(.bk-resize-layout-main) {
     padding-right: 16px;
   }
+
   .yaml-sideslider-layout :deep(.bk-resize-layout-aside-content) {
     padding-right: 16px;
   }

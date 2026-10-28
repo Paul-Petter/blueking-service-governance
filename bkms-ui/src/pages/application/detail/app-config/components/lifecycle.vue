@@ -145,7 +145,7 @@
             >
               <div class="flex flex-col gap-[8px]">
                 <Radio label="wait">
-                  {{ $t('停止等待时间') }}
+                  <span class="text-[14px]">{{ $t('停止等待时间') }}</span>
                 </Radio>
                 <Input
                   v-if="preStopMode === 'wait'"
@@ -161,7 +161,7 @@
               <!-- 自定义命令 -->
               <div>
                 <Radio label="command">
-                  {{ $t('自定义命令') }}
+                  <span class="text-[14px]">{{ $t('自定义命令') }}</span>
                 </Radio>
                 <div
                   v-if="preStopMode === 'command'"
@@ -176,6 +176,10 @@
                     <Radio.Button label="shell">shell</Radio.Button>
                     <Radio.Button label="exec">exec</Radio.Button>
                   </Radio.Group>
+                  <CommandModeHint
+                    :class="{ 'whitespace-nowrap': preStopExecMode === 'shell' }"
+                    :mode="preStopExecMode"
+                  />
                   <RepeatableInput
                     v-if="preStopExecMode === 'exec'"
                     ref="preStopCommandRef"
@@ -276,6 +280,7 @@
   } from '~/@types/v1/app-spec';
   import { AppSpecService } from '~/api/modules/v1';
   import BkmsContent from '~/components/bkms-content.vue';
+  import CommandModeHint from '~/components/command-mode-hint.vue';
   import FieldItem from '~/components/field-item.vue';
   import RepeatableInput from '~/components/repeatable-input.vue';
   import { useAppDetail } from '~/stores/app-detail';
