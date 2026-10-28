@@ -22,6 +22,7 @@ import type { InjectionKey, MaybeRefOrGetter, Ref } from 'vue';
 import { AppConfigFileDefsService } from '~/api/modules/v1';
 
 import type { DefDetailObj, EnvInstanceObj, UpdateDefInput } from '~/@types/v1/app-config-file-defs';
+import type { Config } from '~/api/interceptors';
 
 export type ConfigFileContentSourceType = 'bscp' | 'local';
 /** 配置文件定义视图模型，字段均已归一化，保证类型与默认值稳定 */
@@ -200,20 +201,18 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
         mountedEnvNames: input.mountedEnvNames,
         name: input.name,
       },
-      { needRes: true },
+      { interceptorErr: false, needRes: true },
     );
-    const createdID = result.item?.id || '';
-    await fetchDefs(createdID);
-    return createdID;
+    return result.item?.id || '';
   }
 
-  /** 更新当前定义的基础信息（名称、挂载目录、环境变量渲染等） */
-  async function updateDef(changes: UpdateDefInput) {
-    await AppConfigFileDefsService.updateAppConfigFileDef({
-      appID: toValue(appID),
-      id: activeDefID.value,
-      ...changes,
-    });
+  /** 更新当前定义的基础信息并返回元信息，列表与详情由调用方刷新 */
+  async function updateDef(changes: UpdateDefInput, config: Pick<Config, 'interceptorErr'> = {}) {
+    const result = await AppConfigFileDefsService.updateAppConfigFileDef(
+      { appID: toValue(appID), id: activeDefID.value, ...changes },
+      { ...config, needRes: true },
+    );
+    return result.item;
   }
 
   /** 保存内容；envName 为空保存默认文件，关闭错误拦截由调用方处理版本冲突 */
