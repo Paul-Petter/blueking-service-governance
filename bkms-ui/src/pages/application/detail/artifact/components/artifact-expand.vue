@@ -37,6 +37,39 @@
       />
       <FieldItem
         :container-height="32"
+        :field-value="t('源材料')"
+        :field-width="100"
+      >
+        <template #value>
+          <div
+            v-if="row.sourceMaterial"
+            class="flex min-w-0 max-w-full items-center text-[#313238]"
+          >
+            <!-- 与蓝盾一致：分支 / Tag / CommitID 都用分支图标标修订，短哈希另用 commit 图标 -->
+            <span class="bkms-icon bkms-icon-branchs mr-[5px] shrink-0"></span>
+            <span class="truncate">{{ row.sourceMaterial.revision }}</span>
+            <template v-if="row.sourceMaterial.commitID">
+              <span class="bkms-icon bkms-icon-commit mx-[5px] shrink-0 text-[18px]"></span>
+              <Button
+                class="shrink-0"
+                :disabled="!row.sourceMaterial.commitURL"
+                text
+                theme="primary"
+                @click="handleToCommit(row.sourceMaterial.commitURL || '')"
+              >
+                {{ row.sourceMaterial.commitID.slice(0, 8) }}
+              </Button>
+            </template>
+          </div>
+          <span
+            v-else
+            class="text-[#313238]"
+            >--</span
+          >
+        </template>
+      </FieldItem>
+      <FieldItem
+        :container-height="32"
         :field-value="t('大小')"
         :field-width="100"
         :value="formatSize(Number(row?.size))"
@@ -130,7 +163,7 @@
 <script lang="ts" setup>
   import { computed, h, onMounted, ref } from 'vue';
 
-  import { Exception, OverflowTitle, Tag, Timeline } from 'bkui-vue';
+  import { Button, Exception, OverflowTitle, Tag, Timeline } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { AppImageOutputObj, DeployedEnvInfoOutputObj, ImageTagDeployRecordOutputObj } from '~/@types/v1/images';
   import { ImagesService } from '~/api/modules/v1';
@@ -161,6 +194,11 @@
 
   function getEnvTypeLabel(envType: string) {
     return envTypeMap[envType]?.name || envType;
+  }
+
+  /** 跳转代码仓库 commit 页 */
+  function handleToCommit(url: string) {
+    if (url) window.open(url, '_blank');
   }
 
   /** 按环境类型分组 */
