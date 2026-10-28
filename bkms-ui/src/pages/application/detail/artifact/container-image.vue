@@ -157,6 +157,37 @@
             </Tag>
           </template>
         </TableColumn>
+        <!-- 源材料：与构建管理一致，分支 / Tag 为纯文本，Commit 为链接 -->
+        <TableColumn
+          field="sourceMaterial"
+          :label="t('源材料')"
+          show-overflow="tooltip"
+          :width="200"
+        >
+          <template #default="{ row }: { row: AppImageOutputObj }">
+            <div
+              v-if="row.sourceMaterial"
+              class="flex min-w-0 max-w-full items-center"
+            >
+              <!-- 与蓝盾一致：分支 / Tag / CommitID 都用分支图标标修订，短哈希另用 commit 图标 -->
+              <span class="bkms-icon bkms-icon-branchs mr-[5px] shrink-0"></span>
+              <span class="truncate">{{ row.sourceMaterial.revision }}</span>
+              <template v-if="row.sourceMaterial.commitID">
+                <span class="bkms-icon bkms-icon-commit mx-[5px] shrink-0 text-[18px]"></span>
+                <Button
+                  class="shrink-0"
+                  :disabled="!row.sourceMaterial.commitURL"
+                  text
+                  theme="primary"
+                  @click.stop="handleToCommit(row.sourceMaterial.commitURL || '')"
+                >
+                  {{ row.sourceMaterial.commitID.slice(0, 8) }}
+                </Button>
+              </template>
+            </div>
+            <span v-else>--</span>
+          </template>
+        </TableColumn>
         <TableColumn
           field="size"
           :label="t('大小')"
@@ -348,6 +379,7 @@
   import { AppImageOutputObj } from '~/@types/v1/images';
   import { EnvService, ImagesService } from '~/api/modules/v1';
   import { formatSize } from '~/common/util';
+  import { sourceMaterialText } from '~/components/code-revision/revision';
   import FieldItem from '~/components/field-item.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
@@ -412,8 +444,23 @@
   });
 
   const tooltipConfig = {
-    contentMethod: ({ column, row }: { column: { field?: string }; row: AppImageOutputObj }) => {
+    contentMethod: ({
+      cell,
+      column,
+      row,
+    }: {
+      cell: HTMLElement;
+      column: { field?: string };
+      row: AppImageOutputObj;
+    }) => {
       if (column.field === 'tag' && row.isPromoted) return '';
+      // 源材料内容溢出时展示完整修订 + commit 短哈希，与构建管理一致
+      if (column.field === 'sourceMaterial') {
+        const overflowElement = cell.children[0] as HTMLElement | undefined;
+        if (row.sourceMaterial && overflowElement && overflowElement.scrollWidth > overflowElement.clientWidth) {
+          return sourceMaterialText(row.sourceMaterial);
+        }
+      }
       return undefined;
     },
   };
@@ -514,6 +561,7 @@
     if (!digest) return '';
     return digest.includes(':') ? digest.split(':')[1].slice(0, 8) : digest.slice(0, 8);
   }
+
   function getDeployedEnvTags(deployedEnvs: AppImageOutputObj['deployedEnvs']): DeployedEnvTag[] {
     if (!deployedEnvs?.length) return [];
 
@@ -536,7 +584,6 @@
       label: envTypeMap[envType]?.name || envType,
     }));
   }
-
   function getEnvDisplayName(envName: string) {
     return envNameDisplayMap.value[envName] || envName;
   }
@@ -571,6 +618,11 @@
   function handleClearFilters() {
     searchValue.value = [];
     fetchArtifactList();
+  }
+
+  /** 跳转代码仓库 commit 页 */
+  function handleToCommit(url: string) {
+    if (url) window.open(url, '_blank');
   }
 
   function startPolling() {

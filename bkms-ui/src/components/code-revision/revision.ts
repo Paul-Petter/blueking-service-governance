@@ -22,10 +22,10 @@ export type RevisionType = 'branch' | 'commit' | 'tag';
 /** CommitID 允许 7–40 位十六进制，与构建服务的校验一致 */
 const COMMIT_ID_PATTERN = /^[0-9a-fA-F]{7,40}$/;
 
-/** 构建记录里用来判断源材料是否要去重的来源 */
+/** 构建记录里用来判断源材料是否要去重的来源；字段来自本地构造或镜像接口，均可能缺失 */
 export type SourceRevision = {
-  commitID: string;
-  revision: string;
+  commitID?: string;
+  revision?: string;
   revisionType?: string;
 };
 
@@ -60,8 +60,8 @@ export function revisionRequestFields(showSource: boolean, type: RevisionType, v
 export function sourceMaterialText(material: SourceRevision) {
   // commit 还没回写时不要用修订名顶短哈希，否则提示会变成 "main main"
   if (!material.commitID) {
-    return material.revision;
+    return material.revision || '';
   }
 
-  return `${material.revision} ${material.commitID.slice(0, 8)}`.trim();
+  return `${material.revision || ''} ${material.commitID.slice(0, 8)}`.trim();
 }

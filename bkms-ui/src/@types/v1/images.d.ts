@@ -504,6 +504,10 @@ export interface AppImageOutputObj {
    */
   size?: string;
   /**
+   * 源材料（构建所用代码），非平台构建或无法精确关联到构建记录时为 null
+   */
+  sourceMaterial?: ImageSourceMaterialOutputObj;
+  /**
    * 镜像 TAG
    */
   tag?: string;
@@ -518,6 +522,29 @@ export interface DeployedEnvInfoOutputObj {
    * 环境类型（development/test/staging/production）
    */
   envType?: string;
+}
+
+export interface ImageSourceMaterialOutputObj {
+  /**
+   * 构建实际检出的完整 CommitID
+   */
+  commitID?: string;
+  /**
+   * 代码仓库中该提交的页面地址，仓库地址不是 http(s) 时为空
+   */
+  commitURL?: string;
+  /**
+   * 代码仓库地址
+   */
+  repoURL?: string;
+  /**
+   * 代码修订：分支名、Tag 名或 CommitID，按构建时填写原样返回
+   */
+  revision?: string;
+  /**
+   * 代码来源类型（branch / tag / commit）
+   */
+  revisionType?: string;
 }
 
 export interface PaginatedDeployableImageTagOutputObjs {
